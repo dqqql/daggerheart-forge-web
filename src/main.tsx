@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type { Run, TreeNode } from '../shared/types'
 import { STEP_NAMES, TYPES } from '../shared/types'
+import { chineseFeatureName, chineseFeatureText, chineseReferenceReason, cleanChineseSpacing, cleanFinalCardMarkdown } from '../shared/forge'
 import './style.css'
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -80,7 +81,7 @@ const STAT_LABELS_ZH: Record<string, string> = {
   feature_reaction: '反应特性数'
 }
 
-const STEP_SHORT_NAMES = ['参照', '区间', '推荐', '匹配', '术语', '复核', '卡片']
+const STEP_SHORT_NAMES = ['参照', '区间', '推荐', '匹配', '术语', '卡片']
 
 type PopupCard = {
   id: string
@@ -489,7 +490,7 @@ function App() {
   function handleProgressScrub(e: React.PointerEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
     const progressRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    const step = Math.min(7, Math.max(1, Math.round(progressRatio * 6) + 1))
+    const step = Math.min(6, Math.max(1, Math.round(progressRatio * 5) + 1))
     scrollToStep(step)
   }
 
@@ -879,7 +880,7 @@ function App() {
                 <div className="step-nav-track">
                   <div
                     className="step-nav-fill"
-                    style={{ width: `${((activeStep - 1) / 6) * 100}%` }}
+                    style={{ width: `${((activeStep - 1) / 5) * 100}%` }}
                   />
                   <div className="step-nav-nodes">
                     {STEP_SHORT_NAMES.map((name, i) => {
@@ -969,9 +970,6 @@ function App() {
                         onInsertFinal={insertFinalMarkdown}
                         onOverwriteFinal={overwriteFinalMarkdown}
                         copiedAction={copiedAction}
-                        step3Warnings={
-                          (run.steps.find(st => st.step === 3)?.result as any)?.warnings
-                        }
                       />
                     )}
                   </section>
@@ -1164,9 +1162,9 @@ function App() {
             {hoveredCard.features?.map((f: any, j: number) => (
               <div className="popup-feature" key={j}>
                 <b>
-                  {f.name} · {f.kind}
+                  {chineseFeatureName(f.name)} · {f.kind}
                 </b>
-                <p>{f.text || f.full_text}</p>
+                <p>{chineseFeatureText(f.text || f.full_text)}</p>
               </div>
             ))}
           </div>
@@ -1225,9 +1223,9 @@ function App() {
             {p.card.features?.map((f: any, j: number) => (
               <div className="popup-feature" key={j}>
                 <b>
-                  {f.name} · {f.kind}
+                  {chineseFeatureName(f.name)} · {f.kind}
                 </b>
-                <p>{f.text || f.full_text}</p>
+                <p>{chineseFeatureText(f.text || f.full_text)}</p>
               </div>
             ))}
           </div>
@@ -1300,13 +1298,13 @@ function RenderedMarkdownCard({ markdown }: { markdown: string }) {
       if (!item || item === '（未提供）' || item === '(未提供)') continue
       const fMatch = /^(.+?)\s*[-—–]\s*(被动|动作|反应)\s*[：:]\s*(.+)$/.exec(item)
       if (fMatch) {
-        features.push({ name: fMatch[1].trim(), kind: fMatch[2].trim(), text: fMatch[3].trim() })
+        features.push({ name: chineseFeatureName(fMatch[1]), kind: fMatch[2].trim(), text: cleanChineseSpacing(fMatch[3]) })
       } else {
         const parts = item.split(/[：:]/)
         features.push({
-          name: parts[0] || '特性',
+          name: chineseFeatureName(parts[0] || '特性'),
           kind: '',
-          text: parts.slice(1).join('：') || item
+          text: cleanChineseSpacing(parts.slice(1).join('：') || item)
         })
       }
     }
@@ -1367,8 +1365,7 @@ function StepContent({
   onCopyFinal,
   onInsertFinal,
   onOverwriteFinal,
-  copiedAction,
-  step3Warnings
+  copiedAction
 }: {
   step: number
   result: any
@@ -1378,7 +1375,6 @@ function StepContent({
   onInsertFinal?: (text: string) => void
   onOverwriteFinal?: (text: string) => void
   copiedAction?: 'none' | 'copy' | 'insert' | 'overwrite'
-  step3Warnings?: string[]
 }) {
   if (step === 1) {
     return (
@@ -1396,7 +1392,7 @@ function StepContent({
             <span>
               位阶 {r.card.tier} · {formatEnemyType(r.card.type)}
             </span>
-            <p>{r.reason}</p>
+            <p>{chineseReferenceReason(r.reason)}</p>
           </div>
         ))}
       </div>
@@ -1459,21 +1455,21 @@ function StepContent({
       <div className="step-body">
         {result.groups?.map((g: any) => (
           <div className="feature-group" key={g.index}>
-            <div className="feature-title">{g.name}</div>
-            <div className="feature-original">{g.original}</div>
+            <div className="feature-title">{chineseFeatureName(g.name)}</div>
+            <div className="feature-original">{cleanChineseSpacing(g.original)}</div>
             <hr className="feature-divider" />
             {g.matches?.length ? (
               g.matches.slice(0, 3).map((m: any, i: number) => (
                 <div key={i} className="feature-match-item">
                   <div className="feature-match-title">
                     <span>
-                      {m.adversary} · {m.feature}
+                      {m.adversary} · {chineseFeatureName(m.feature)}
                     </span>
                     <span className="feature-match-tag">
                       位阶 {m.tier} · {formatEnemyType(m.type)}
                     </span>
                   </div>
-                  <div className="feature-match-body">{m.text}</div>
+                  <div className="feature-match-body">{chineseFeatureText(m.text)}</div>
                 </div>
               ))
             ) : (
@@ -1493,7 +1489,7 @@ function StepContent({
             <p key={i}>
               <b>{c.name}</b>：{c.original} → {c.recommended}{' '}
               <span className="feature-match-tag">
-                {c.basis.adversary} · {c.basis.feature}
+                {c.basis.adversary} · {chineseFeatureName(c.basis.feature)}
               </span>
             </p>
           ))
@@ -1504,48 +1500,16 @@ function StepContent({
     )
   }
 
+  // 步骤6：最终完整数据块渲染，复制、插入、覆盖
   if (step === 6) {
-    const cleanPrefix = (str: string) =>
-      str
-        .replace(
-          /^(\[|【|\(|（)?(确定问题|待确认|待作者决定|建议|问题|警告|待定)(\]|】|\)|）)?\s*[：:、\s-]*/i,
-          ''
-        )
-        .replace(/^(确定问题|待确认|待作者决定|建议|问题|警告)[：:、\s-]*/i, '')
-        .trim()
-
-    const rawList = [...(step3Warnings || []), ...(result.warnings || [])]
-    const cleanedList = Array.from(new Set(rawList.map(cleanPrefix)))
-      .filter(w => w && !/^(?:attack_name|features|locked_stats)\b/i.test(w) && !/\[object Object\]/i.test(w))
-      .slice(0, 5)
-
+    const markdown = cleanFinalCardMarkdown(result.markdown)
     return (
       <div className="step-body">
-        {cleanedList.length ? (
-          <div className="mechanism-list">
-            {cleanedList.map((w, i) => (
-              <div className="mechanism-item" key={i}>
-                <span className="dot" />
-                <span>{w}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">未发现机制冲突与遗漏。</p>
-        )}
-      </div>
-    )
-  }
-
-  // 步骤7：最终完整数据块渲染，复制、插入、覆盖
-  if (step === 7) {
-    return (
-      <div className="step-body">
-        <RenderedMarkdownCard markdown={result.markdown} />
+        <RenderedMarkdownCard markdown={markdown} />
         <div className="card-actions-group">
           <button
             className="secondary"
-            onClick={() => onCopyFinal && onCopyFinal(result.markdown)}
+            onClick={() => onCopyFinal && onCopyFinal(markdown)}
             aria-label="复制完整数据块"
           >
             {copiedAction === 'copy' ? (
@@ -1560,7 +1524,7 @@ function StepContent({
           </button>
           <button
             className="secondary"
-            onClick={() => onInsertFinal && onInsertFinal(result.markdown)}
+            onClick={() => onInsertFinal && onInsertFinal(markdown)}
             aria-label="将数据块插入当前文件"
           >
             {copiedAction === 'insert' ? (
@@ -1575,7 +1539,7 @@ function StepContent({
           </button>
           <button
             className="secondary"
-            onClick={() => onOverwriteFinal && onOverwriteFinal(result.markdown)}
+            onClick={() => onOverwriteFinal && onOverwriteFinal(markdown)}
             aria-label="用数据块覆盖当前文件"
           >
             {copiedAction === 'overwrite' ? (

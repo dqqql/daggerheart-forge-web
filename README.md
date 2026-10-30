@@ -1,6 +1,6 @@
 # 敌人锻炉网页
 
-独立于 `daggerheart-adversary-forge` skill 的桌面网页工程。React + Vite 提供 VS Code 风格的文件树、多标签原始 Markdown 编辑器和七步只读分析；Cloudflare Pages Functions、D1、Worker Workflows 处理账号、保存与后台任务。
+独立于 `daggerheart-adversary-forge` skill 的桌面网页工程。React + Vite 提供 VS Code 风格的文件树、多标签原始 Markdown 编辑器和六步只读分析；Cloudflare Pages Functions、D1、Worker Workflows 处理账号、保存与后台任务。
 
 ## 开发
 
@@ -20,4 +20,4 @@
 
 `/api/auth/{register,login,logout,me}` 管理账号；`/api/nodes` 管理文件树与 Markdown；`/api/key` 保存或删除加密密钥；`/api/runs` 创建和读取快照任务。每个请求按会话用户限定数据。密码使用 PBKDF2-SHA-256 与独立盐；会话为 HttpOnly、SameSite=Strict Cookie。用户名密码首版不提供自助找回。
 
-后台固定七步：SRD 参照、基准、推荐值及基础数据块、逐特性匹配、术语建议、机制复核、最终卡片。模型结果须通过结构校验，失败步骤保留错误并可重试。数值与匹配仍属于创作建议，不宣称官方认证。站内引用不提供跳转链接，数据内部保留原始 URL 供维护核查。
+后台分析为六步：SRD 参照、基准、推荐值及基础数据块、逐特性匹配、术语建议、最终卡片。为兼容尚未更新的独立 Worker，D1 暂保留旧第六步占位并在第七条存放最终卡片；新版 Worker 跳过机制复核，界面只显示六步。模型结果须通过结构校验，失败步骤保留错误并可重试。数值与匹配仍属于创作建议，不宣称官方认证。站内引用不提供跳转链接，数据内部保留原始 URL 供维护核查。
