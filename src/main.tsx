@@ -19,7 +19,11 @@ import {
   Sun,
   Moon,
   AlertCircle,
-  Plus
+  Plus,
+  MoreHorizontal,
+  Pencil,
+  FolderInput,
+  Trash2
 } from 'lucide-react'
 import type { Run, TreeNode } from '../shared/types'
 import { STEP_NAMES, TYPES } from '../shared/types'
@@ -115,6 +119,10 @@ function App() {
   const [highestZIndex, setHighestZIndex] = useState(40)
   const [creditsOpen, setCreditsOpen] = useState(false)
   const [copiedAction, setCopiedAction] = useState<'none' | 'copy' | 'insert' | 'overwrite'>('none')
+  const [nodeMenu, setNodeMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [nodeDialog, setNodeDialog] = useState<{ action: 'create' | 'rename' | 'move' | 'delete'; kind?: 'folder' | 'file'; id?: string; parentId?: string | null } | null>(null)
+  const [nodeValue, setNodeValue] = useState('')
+  const [nodeBusy, setNodeBusy] = useState(false)
 
   const drafts = useRef(new Map<string, string>())
   const pending = useRef(new Map<string, ReturnType<typeof setTimeout>>())
@@ -126,6 +134,7 @@ function App() {
   const stepsScrollRef = useRef<HTMLDivElement>(null)
 
   const selectedNode = nodes.find(n => n.id === selected)
+  const menuNode = nodes.find(n => n.id === nodeMenu?.id)
   const path: string[] = []
   let ancestor = selectedNode?.parent_id
   while (ancestor) {
@@ -139,6 +148,17 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNodeMenu(null)
+        setNodeDialog(null)
+      }
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [])
 
   // 监听步骤滚动位置，实时更新中央进度条高亮
   useEffect(() => {
@@ -291,9 +311,14 @@ function App() {
     }
   }
 
-  async function create(kind: 'folder' | 'file', parent_id: string | null = null) {
-    const name = prompt(kind === 'folder' ? '文件夹名称：' : '敌人文件名称：')
-    if (!name) return
+  function openNodeDialog(action: 'create' | 'rename' | 'move' | 'delete', id?: string, kind?: 'folder' | 'file', parentId: string | null = null) {
+    setNodeMenu(null)
+    const node = nodes.find(n => n.id === id)
+    setNodeValue(action === 'rename' ? node?.name || '' : action === 'move' ? node?.parent_id || '' : '')
+    setNodeDialog({ action, id, kind, parentId })
+  }
+
+  async function create(kind: 'folder' | 'file', name: string, parent_id: string | null = null): Promise<boolean> {
     try {
       const x = await api<{ id: string }>('nodes', {
         method: 'POST',
@@ -305,17 +330,18 @@ function App() {
       ])
       if (parent_id) setExpanded(s => new Set(s).add(parent_id))
       if (kind === 'file') selectFile(x.id)
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     }
   }
 
-  async function mutateNode(id: string, operation: 'rename' | 'move' | 'delete') {
+  async function mutateNode(id: string, operation: 'rename' | 'move' | 'delete', value?: string | null): Promise<boolean> {
     const node = nodes.find(n => n.id === id)
-    if (!node) return
+    if (!node) return false
     try {
       if (operation === 'delete') {
-        if (!confirm(`确定删除「${node.name}」及其所有子项吗？`)) return
         await api('nodes/' + id, { method: 'DELETE' })
         const remove = new Set([id])
         let changed = true
@@ -331,26 +357,15 @@ function App() {
         setNodes(ns => ns.filter(n => !remove.has(n.id)))
         setOpenTabs(tabs => tabs.filter(tab => !remove.has(tab)))
         if (selected && remove.has(selected)) setSelected(null)
+        remove.forEach(removed => {
+          const timer = pending.current.get(removed)
+          if (timer) clearTimeout(timer)
+          pending.current.delete(removed)
+          drafts.current.delete(removed)
+          versions.current.delete(removed)
+        })
       } else {
-        const folders = nodes.filter(n => n.kind === 'folder' && n.id !== id)
-        const value = prompt(
-          operation === 'rename'
-            ? '新名称：'
-            : `移到哪个文件夹？输入编号：\n0 根目录\n${folders
-                .map((f, i) => `${i + 1} ${f.name}`)
-                .join('\n')}`,
-          operation === 'rename' ? node.name : '0'
-        )
-        if (value === null) return
-        const target =
-          operation === 'move'
-            ? Number(value) === 0
-              ? null
-              : folders[Number(value) - 1]?.id
-            : null
-        if (operation === 'move' && Number(value) !== 0 && !target) {
-          throw Error('目标编号无效')
-        }
+        const target = operation === 'move' ? value ?? null : null
         await api('nodes/' + id, {
           method: 'PATCH',
           body: JSON.stringify(operation === 'rename' ? { name: value } : { parent_id: target })
@@ -358,13 +373,32 @@ function App() {
         setNodes(ns =>
           ns.map(n =>
             n.id === id
-              ? { ...n, ...(operation === 'rename' ? { name: value } : { parent_id: target }) }
+              ? { ...n, ...(operation === 'rename' ? { name: String(value).trim() } : { parent_id: target }) }
               : n
           )
         )
+        if (operation === 'move' && target) setExpanded(s => new Set(s).add(target))
       }
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
+    }
+  }
+
+  async function submitNodeDialog() {
+    if (!nodeDialog || nodeBusy) return
+    const { action, kind, id, parentId } = nodeDialog
+    const name = nodeValue.trim()
+    if ((action === 'create' || action === 'rename') && !name) return
+    setNodeBusy(true)
+    try {
+      let succeeded = false
+      if (action === 'create' && kind) succeeded = await create(kind, name, parentId)
+      else if (id && action !== 'create') succeeded = await mutateNode(id, action, action === 'rename' ? name : action === 'move' ? nodeValue || null : undefined)
+      if (succeeded) setNodeDialog(null)
+    } finally {
+      setNodeBusy(false)
     }
   }
 
@@ -528,20 +562,23 @@ function App() {
           </button>
           <span className="row-actions">
             {node.kind === 'folder' && (
-              <button title="新建子项" onClick={() => create('file', node.id)}>
+              <button aria-label={`在${node.name}中新建文件`} onClick={() => openNodeDialog('create', undefined, 'file', node.id)}>
                 ＋
               </button>
             )}
             <button
-              title="更多操作"
-              onClick={() => {
-                const action = prompt('输入 rename（重命名）、move（移动）或 delete（删除）：')
-                if (action === 'rename' || action === 'move' || action === 'delete') {
-                  mutateNode(node.id, action)
-                }
+              aria-label={`${node.name}的更多操作`}
+              aria-expanded={nodeMenu?.id === node.id}
+              onClick={e => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setNodeMenu(current => current?.id === node.id ? null : {
+                  id: node.id,
+                  x: Math.min(rect.right, window.innerWidth - 188),
+                  y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - (node.kind === 'folder' ? 268 : 168)))
+                })
               }}
             >
-              ⋯
+              <MoreHorizontal size={17} />
             </button>
           </span>
         </div>
@@ -706,10 +743,10 @@ function App() {
           <div className="pane-heading">
             <span>资源管理器</span>
             <div>
-              <button title="新建敌人" onClick={() => create('file')}>
+              <button aria-label="新建敌人文件" onClick={() => openNodeDialog('create', undefined, 'file')}>
                 <FilePlus2 size={15} />
               </button>
-              <button title="新建文件夹" onClick={() => create('folder')}>
+              <button aria-label="新建文件夹" onClick={() => openNodeDialog('create', undefined, 'folder')}>
                 <FolderPlus size={15} />
               </button>
             </div>
@@ -729,9 +766,6 @@ function App() {
               )
               .map(n => renderNode(n))}
           </nav>
-          {nodes.length === 0 && (
-            <div className="empty-tree">点击右上角图标新建敌人文件。</div>
-          )}
         </aside>
         <div
           className="resizer"
@@ -801,8 +835,7 @@ function App() {
                 <Flame size={48} />
               </div>
               <h2>开始创作原创敌人</h2>
-              <p>从左侧资源管理器中选择文件，或点击下方按钮新建敌人数据草稿。</p>
-              <button className="primary" onClick={() => create('file')}>
+              <button className="primary" onClick={() => openNodeDialog('create', undefined, 'file')}>
                 <FilePlus2 size={16} /> 新建敌人文件
               </button>
             </div>
@@ -968,13 +1001,6 @@ function App() {
                 >
                   <Play size={15} /> 运行分析
                 </button>
-                {!selected ? (
-                  <p>请先从左侧打开一个敌人文件</p>
-                ) : !keyReady ? (
-                  <p>请先在右上角设置中填写 DeepSeek API Key</p>
-                ) : (
-                  <p>点击上方按钮开始执行 Daggerheart 7步标准分析</p>
-                )}
               </div>
             )}
           </div>
@@ -999,6 +1025,64 @@ function App() {
           <button onClick={() => setError('')} aria-label="关闭提示">
             <X size={15} />
           </button>
+        </div>
+      )}
+
+      {nodeMenu && (
+        <>
+          <div className="menu-dismiss" onClick={() => setNodeMenu(null)} />
+          <div className="node-menu" role="menu" style={{ left: nodeMenu.x, top: nodeMenu.y }}>
+            {menuNode?.kind === 'folder' && (
+              <>
+                <button autoFocus role="menuitem" onClick={() => openNodeDialog('create', undefined, 'file', menuNode.id)}><FilePlus2 size={15} /> 新建文件</button>
+                <button role="menuitem" onClick={() => openNodeDialog('create', undefined, 'folder', menuNode.id)}><FolderPlus size={15} /> 新建文件夹</button>
+                <div className="node-menu-separator" />
+              </>
+            )}
+            <button autoFocus={menuNode?.kind !== 'folder'} role="menuitem" onClick={() => openNodeDialog('rename', nodeMenu.id)}><Pencil size={15} /> 重命名</button>
+            <button role="menuitem" onClick={() => openNodeDialog('move', nodeMenu.id)}><FolderInput size={15} /> 移动到…</button>
+            <div className="node-menu-separator" />
+            <button className="danger" role="menuitem" onClick={() => openNodeDialog('delete', nodeMenu.id)}><Trash2 size={15} /> 删除</button>
+          </div>
+        </>
+      )}
+
+      {nodeDialog && (
+        <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setNodeDialog(null) }}>
+          <form className="modal node-dialog" role="dialog" aria-modal="true" aria-label="文件操作" onSubmit={e => { e.preventDefault(); void submitNodeDialog() }}>
+            <button type="button" className="close" onClick={() => setNodeDialog(null)} aria-label="关闭"><X size={17} /></button>
+            <h2>{nodeDialog.action === 'create' ? `新建${nodeDialog.kind === 'folder' ? '文件夹' : '敌人文件'}` : nodeDialog.action === 'rename' ? '重命名' : nodeDialog.action === 'move' ? '移动到' : '删除'}</h2>
+            {nodeDialog.action === 'create' || nodeDialog.action === 'rename' ? (
+              <label>名称
+                <input autoFocus value={nodeValue} onChange={e => setNodeValue(e.target.value)} maxLength={100} placeholder="输入名称" />
+              </label>
+            ) : nodeDialog.action === 'move' ? (
+              <div className="move-choices" role="radiogroup" aria-label="目标文件夹">
+                {[{ id: '', name: '根目录', parent_id: null }, ...nodes.filter(n => {
+                  if (n.kind !== 'folder' || n.id === nodeDialog.id) return false
+                  let parent = n.parent_id
+                  while (parent) {
+                    if (parent === nodeDialog.id) return false
+                    parent = nodes.find(item => item.id === parent)?.parent_id || null
+                  }
+                  return true
+                })].map(folder => (
+                  <label key={folder.id} className="move-choice">
+                    <input type="radio" name="destination" checked={nodeValue === folder.id} onChange={() => setNodeValue(folder.id)} />
+                    <Folder size={16} /> {folder.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p>确定删除「{nodes.find(n => n.id === nodeDialog.id)?.name}」{nodes.some(n => n.parent_id === nodeDialog.id) ? '及其中的所有内容' : ''}吗？此操作无法撤销。</p>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="secondary" onClick={() => setNodeDialog(null)}>取消</button>
+              <button type="submit" className={nodeDialog.action === 'delete' ? 'secondary danger-button' : 'primary'} disabled={nodeBusy || ((nodeDialog.action === 'create' || nodeDialog.action === 'rename') && !nodeValue.trim())}>
+                {nodeDialog.action === 'delete' ? '删除' : nodeDialog.action === 'move' ? '移动' : '确定'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -1431,7 +1515,9 @@ function StepContent({
         .trim()
 
     const rawList = [...(step3Warnings || []), ...(result.warnings || [])]
-    const cleanedList = Array.from(new Set(rawList.map(cleanPrefix))).filter(Boolean).slice(0, 5)
+    const cleanedList = Array.from(new Set(rawList.map(cleanPrefix)))
+      .filter(w => w && !/^(?:attack_name|features|locked_stats)\b/i.test(w) && !/\[object Object\]/i.test(w))
+      .slice(0, 5)
 
     return (
       <div className="step-body">
@@ -1460,7 +1546,7 @@ function StepContent({
           <button
             className="secondary"
             onClick={() => onCopyFinal && onCopyFinal(result.markdown)}
-            title="复制带 Markdown 标记的完整数据块"
+            aria-label="复制完整数据块"
           >
             {copiedAction === 'copy' ? (
               <>
@@ -1475,7 +1561,7 @@ function StepContent({
           <button
             className="secondary"
             onClick={() => onInsertFinal && onInsertFinal(result.markdown)}
-            title="在当前 Markdown 原文末尾添加分割线并插入推荐数据块"
+            aria-label="将数据块插入当前文件"
           >
             {copiedAction === 'insert' ? (
               <>
@@ -1490,7 +1576,7 @@ function StepContent({
           <button
             className="secondary"
             onClick={() => onOverwriteFinal && onOverwriteFinal(result.markdown)}
-            title="用推荐的完整数据块覆盖替换当前文件内容"
+            aria-label="用数据块覆盖当前文件"
           >
             {copiedAction === 'overwrite' ? (
               <>

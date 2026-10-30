@@ -313,8 +313,9 @@ input:focus-visible,
 }
 
 .pane-heading button:hover {
-  background: var(--color-header-hover);
-  color: var(--color-fg-default);
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-border);
+  color: var(--color-accent-fg);
 }
 
 .pane-heading {
@@ -371,7 +372,7 @@ input:focus-visible,
 }
 
 .tree-row:hover {
-  background: var(--color-header-hover);
+  background: var(--color-canvas-inset);
 }
 
 .tree-row.active {
@@ -438,8 +439,8 @@ input:focus-visible,
 }
 
 .row-actions button:hover {
-  background: var(--color-canvas-default);
-  color: var(--color-fg-default);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-fg);
 }
 
 .empty-tree {
@@ -785,8 +786,9 @@ input:focus-visible,
 }
 
 .secondary:hover {
-  background: var(--color-header-hover);
-  border-color: var(--color-border-default);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent-border);
 }
 
 .secondary:active {
@@ -879,9 +881,12 @@ input:focus-visible,
 
 .step-nav-nodes {
   position: absolute;
-  inset: 0;
+  top: -9px;
+  left: 0;
+  right: 0;
+  height: 22px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
 }
 
@@ -1495,6 +1500,55 @@ input:focus-visible,
   color: var(--color-fg-muted);
   margin: 8px 0 0;
 }
+
+.analysis-empty .run-button {
+  min-width: 190px;
+  min-height: 48px;
+  justify-content: center;
+  font-size: 16px;
+  gap: 9px;
+}
+
+.analysis-empty .run-button svg { width: 18px; height: 18px; }
+
+.menu-dismiss { position: fixed; inset: 0; z-index: 65; }
+
+.node-menu {
+  position: fixed;
+  z-index: 66;
+  width: 174px;
+  padding: 5px;
+  background: var(--color-canvas-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+}
+
+.node-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-default);
+  text-align: left;
+  font-size: 13px;
+}
+
+.node-menu button:hover { background: var(--color-accent-subtle); color: var(--color-accent-fg); }
+.node-menu button.danger { color: var(--color-danger-fg); }
+.node-menu button.danger:hover { background: var(--color-danger-subtle); }
+.node-menu-separator { height: 1px; margin: 4px 5px; background: var(--color-border-muted); }
+.node-dialog { min-width: min(420px, calc(100vw - 32px)); }
+.move-choices { max-height: 240px; overflow: auto; margin: 12px 0; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); }
+.modal .move-choice { display: flex; flex-direction: row; align-items: center; gap: 9px; padding: 9px 12px; margin: 0; font-weight: 400; cursor: pointer; }
+.move-choice:hover { background: var(--color-accent-subtle); }
+.modal .move-choice input { width: 15px; height: 15px; padding: 0; }
+.danger-button { color: var(--color-danger-fg); border-color: var(--color-danger-border); }
+.danger-button:hover { background: var(--color-danger-subtle); color: var(--color-danger-fg); border-color: var(--color-danger-border); }
 
 .retry {
   width: 100%;
