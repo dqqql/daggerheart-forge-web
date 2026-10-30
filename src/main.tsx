@@ -8,7 +8,6 @@ import {
   Folder,
   FileText,
   Play,
-  Pin,
   X,
   Settings2,
   LogOut,
@@ -65,17 +64,23 @@ const STAT_LABELS_ZH: Record<string, string> = {
   stress: '压力点',
   attack_bonus: '攻击加值',
   damage_expected: '期望伤害',
+  damage_min: '最小伤害',
+  damage_max: '最大伤害',
   attack_formula: '攻击骰式',
   attack_name: '攻击名称',
   attack_range: '攻击距离',
   damage_type: '伤害类型',
-  experience: '经历'
+  experience: '经历',
+  feature_passive: '被动特性数',
+  feature_action: '动作特性数',
+  feature_reaction: '反应特性数'
 }
+
+const STEP_SHORT_NAMES = ['参照', '区间', '推荐', '匹配', '术语', '复核', '卡片']
 
 type PopupCard = {
   id: string
   card: Card
-  pinned: boolean
   x: number
   y: number
   zIndex: number
@@ -97,13 +102,14 @@ function App() {
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [run, setRun] = useState<Run | null>(null)
+  const [activeStep, setActiveStep] = useState(1)
   const [keyOpen, setKeyOpen] = useState(false)
   const [apiKey, setApiKey] = useState('')
   const [keyReady, setKeyReady] = useState(false)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [leftWidth, setLeftWidth] = useState(260)
-  const [rightWidth, setRightWidth] = useState(460)
+  const [leftWidth, setLeftWidth] = useState(280)
+  const [rightWidth, setRightWidth] = useState(540)
   const [popups, setPopups] = useState<PopupCard[]>([])
   const [hoveredCard, setHoveredCard] = useState<Card | null>(null)
   const [highestZIndex, setHighestZIndex] = useState(40)
@@ -117,6 +123,8 @@ function App() {
   const selectedRef = useRef(selected)
   selectedRef.current = selected
   const lineNumbers = useRef<HTMLDivElement>(null)
+  const stepsScrollRef = useRef<HTMLDivElement>(null)
+
   const selectedNode = nodes.find(n => n.id === selected)
   const path: string[] = []
   let ancestor = selectedNode?.parent_id
@@ -131,6 +139,27 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  // 监听步骤滚动位置，实时更新中央进度条高亮
+  useEffect(() => {
+    const container = stepsScrollRef.current
+    if (!container || !run) return
+
+    const handleScroll = () => {
+      const cards = container.querySelectorAll<HTMLElement>('.step-card')
+      let current = 1
+      const containerTop = container.scrollTop
+      cards.forEach((card, i) => {
+        if (card.offsetTop - container.offsetTop <= containerTop + 80) {
+          current = i + 1
+        }
+      })
+      setActiveStep(current)
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [run])
 
   function selectFile(id: string) {
     setOpenTabs(tabs => (tabs.includes(id) ? tabs : [...tabs, id]))
@@ -378,7 +407,7 @@ function App() {
         const dividerX = window.innerWidth - rightWidth
         const initX = Math.max(16, dividerX - cardWidth - 16 - stagger)
         const initY = 72 + stagger
-        return [...ps, { id: card.id, card, pinned: false, x: initX, y: initY, zIndex: nextZ }]
+        return [...ps, { id: card.id, card, x: initX, y: initY, zIndex: nextZ }]
       })
       return nextZ
     })
@@ -413,6 +442,21 @@ function App() {
 
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
+  }
+
+  function scrollToStep(stepIndex: number) {
+    setActiveStep(stepIndex)
+    const el = document.getElementById(`step-card-${stepIndex}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  function handleProgressScrub(e: React.PointerEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const progressRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const step = Math.min(7, Math.max(1, Math.round(progressRatio * 6) + 1))
+    scrollToStep(step)
   }
 
   function copyFinalMarkdown(text: string) {
@@ -471,14 +515,14 @@ function App() {
             }
           >
             {node.kind === 'folder' ? (
-              opened ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+              opened ? <ChevronDown size={15} /> : <ChevronRight size={15} />
             ) : (
               <span className="chevron-gap" />
             )}
             {node.kind === 'folder' ? (
-              <Folder size={15} color="#54aeff" />
+              <Folder size={17} color="#54aeff" />
             ) : (
-              <FileText size={15} color="var(--color-fg-muted)" />
+              <FileText size={17} color="var(--color-fg-muted)" />
             )}
             <span>{node.name}</span>
           </button>
@@ -506,7 +550,7 @@ function App() {
     )
   }
 
-  // 未登录界面（严格按照 GitHub 认证页面风格）
+  // 未登录界面
   if (!user) {
     return (
       <main className="auth-screen">
@@ -657,7 +701,7 @@ function App() {
 
       {/* 工作区主布局 */}
       <div className="workspace">
-        {/* 左侧资源管理器 */}
+        {/* 左侧资源管理器（字体与行高放大，更清晰） */}
         <aside className="explorer" style={{ width: leftWidth }}>
           <div className="pane-heading">
             <span>资源管理器</span>
@@ -694,7 +738,7 @@ function App() {
           onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
           onPointerMove={e => {
             if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-              setLeftWidth(Math.max(200, Math.min(460, e.clientX)))
+              setLeftWidth(Math.max(220, Math.min(480, e.clientX)))
             }
           }}
         />
@@ -765,22 +809,72 @@ function App() {
           )}
         </main>
 
-        {/* 右侧敌人分析面板 */}
+        {/* 分析栏左侧分界栏：加宽且中央带拖拽手柄 */}
         <div
-          className="resizer"
+          className="analysis-resizer"
+          title="按住左右拖动调整分析面板宽度"
           onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
           onPointerMove={e => {
             if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-              setRightWidth(Math.max(360, Math.min(760, window.innerWidth - e.clientX)))
+              setRightWidth(Math.max(380, Math.min(840, window.innerWidth - e.clientX)))
             }
           }}
         />
+
+        {/* 右侧敌人分析面板 */}
         <aside className="analysis" style={{ width: rightWidth }}>
           <div className="pane-heading">
             <span>分析引擎</span>
           </div>
 
-          {/* 运行过时在顶部展示运行按钮（居中、非满宽）；未运行过时不在此处占条 */}
+          {/* 中央进度条：点击、拖动平滑滚动跳转步骤 */}
+          {run && (
+            <div className="step-nav-bar">
+              <div
+                className="step-nav-track-wrapper"
+                onPointerDown={e => {
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  handleProgressScrub(e)
+                }}
+                onPointerMove={e => {
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                    handleProgressScrub(e)
+                  }
+                }}
+                title="点击或拖动跳转到对应步骤"
+              >
+                <div className="step-nav-track">
+                  <div
+                    className="step-nav-fill"
+                    style={{ width: `${((activeStep - 1) / 6) * 100}%` }}
+                  />
+                  <div className="step-nav-nodes">
+                    {STEP_SHORT_NAMES.map((name, i) => {
+                      const stepNum = i + 1
+                      const isDone = (run.steps.find(s => s.step === stepNum)?.status || '') === 'done'
+                      const isActive = activeStep === stepNum
+                      return (
+                        <button
+                          key={stepNum}
+                          className={`step-nav-node ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}
+                          onClick={ev => {
+                            ev.stopPropagation()
+                            scrollToStep(stepNum)
+                          }}
+                          title={`#${stepNum} ${STEP_NAMES[i]}`}
+                        >
+                          <span className="step-nav-dot">{stepNum}</span>
+                          <span className="step-nav-label">{name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 运行过时在顶部展示运行按钮（居中、非满宽） */}
           {run && (
             <div className="run-controls">
               <button
@@ -801,7 +895,7 @@ function App() {
             </div>
           )}
 
-          <div className="steps-scroll">
+          <div className="steps-scroll" ref={stepsScrollRef}>
             {run ? (
               <>
                 <div className="run-meta">
@@ -812,15 +906,12 @@ function App() {
                       ? '执行异常'
                       : '分析中'}
                 </div>
-                <div className="progress-track">
-                  <div
-                    style={{
-                      width: `${(run.steps.filter(s => s.status === 'done').length / 7) * 100}%`
-                    }}
-                  />
-                </div>
                 {run.steps.map(s => (
-                  <section className={'step-card ' + s.status} key={s.step}>
+                  <section
+                    className={'step-card ' + s.status}
+                    key={s.step}
+                    id={`step-card-${s.step}`}
+                  >
                     <div className="step-head">
                       <span className="step-number">#{s.step}</span>
                       <h3>{STEP_NAMES[s.step - 1]}</h3>
@@ -951,7 +1042,7 @@ function App() {
       {/* 版权与来源弹窗 */}
       {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
 
-      {/* 悬浮预览窗口（鼠标离开消失，不遮挡操作） */}
+      {/* 悬浮预览窗口：移开即消失，去除了“悬浮预览”徽章 */}
       {hoveredCard && !popups.some(p => p.id === hoveredCard.id) && (
         <div
           className="card-hover-preview"
@@ -965,7 +1056,6 @@ function App() {
             <span>
               位阶 {hoveredCard.tier} · {formatEnemyType(hoveredCard.type)}
             </span>
-            <span className="hover-badge">悬浮预览</span>
           </div>
           <div className="popup-body">
             <p>{hoveredCard.description}</p>
@@ -999,7 +1089,7 @@ function App() {
         </div>
       )}
 
-      {/* 点击弹出的 SRD 怪物卡片：位于分界栏左侧、可拖动、可钉住、可删除、自动错开 */}
+      {/* 点击弹出的 SRD 怪物卡片：位于分界栏左侧、可拖动、去除了钉子按钮、保留关闭 */}
       {popups.map(p => (
         <div
           className="card-popup"
@@ -1022,18 +1112,7 @@ function App() {
               位阶 {p.card.tier} · {formatEnemyType(p.card.type)}
             </span>
             <button
-              title={p.pinned ? '取消钉住' : '钉住到前台'}
-              className={p.pinned ? 'pinned' : ''}
-              onClick={() =>
-                setPopups(ps =>
-                  ps.map(x => (x.id === p.id ? { ...x, pinned: !x.pinned } : x))
-                )
-              }
-            >
-              <Pin size={15} />
-            </button>
-            <button
-              title="关闭 / 删除"
+              title="关闭"
               onClick={() => setPopups(ps => ps.filter(x => x.id !== p.id))}
             >
               <X size={15} />
@@ -1074,69 +1153,78 @@ function App() {
   )
 }
 
-function RenderedMarkdownCard({
-  markdown,
-  suggestions,
-  showRationales
-}: {
-  markdown: string
-  suggestions?: Record<string, any>
-  showRationales?: boolean
-}) {
+// 严谨纯净的 Markdown 卡片渲染器（处理所有 ** 加粗与特性，杜绝任何未渲染的 ** 标记）
+function RenderedMarkdownCard({ markdown }: { markdown: string }) {
   const lines = markdown.split(/\r?\n/)
-  const titleLine = lines.find(l => /^#\s+/.test(l))
-  const title = titleLine ? titleLine.replace(/^#\s+/, '').trim() : ''
-
-  const badgeLine = lines.find(l => /^\*\*(?:T|Tier|位阶)\s*\d+/i.test(l.trim()))
-  let badgeText = ''
-  if (badgeLine) {
-    const rawBadge = badgeLine.replace(/\*\*/g, '').trim()
-    const tierMatch = rawBadge.match(/(?:T|Tier|位阶)\s*([1-4])/i)
-    const typeMatch =
-      Object.keys(TYPES).find(t => rawBadge.includes(t)) ||
-      Object.keys(TYPE_NAMES_ZH).find(t => rawBadge.toLowerCase().includes(t))
-    if (tierMatch) {
-      badgeText = `位阶 ${tierMatch[1]} · ${
-        typeMatch ? TYPE_NAMES_ZH[typeMatch] || typeMatch : '标准'
-      }`
-    } else {
-      badgeText = rawBadge
-    }
-  }
-
-  const featureHeaderIndex = lines.findIndex(l => /^##\s*特性/.test(l.trim()))
-  const metaLines = featureHeaderIndex >= 0 ? lines.slice(0, featureHeaderIndex) : lines
-  const featureLines = featureHeaderIndex >= 0 ? lines.slice(featureHeaderIndex + 1) : []
-
-  const descLines: string[] = []
-  const bulletLines: { key: string; value: string; raw: string }[] = []
-
-  for (const line of metaLines) {
-    const trimmed = line.trim()
-    if (!trimmed || /^#\s+/.test(trimmed) || /^\*\*(?:T|Tier|位阶)/i.test(trimmed)) continue
-    const bulletMatch = /^[-*]\s*(?:\*\*)?([^：:]+?)(?:\*\*)?\s*[：:]\s*(.+)$/.exec(trimmed)
-    if (bulletMatch) {
-      bulletLines.push({
-        key: bulletMatch[1].replace(/\*\*/g, '').trim(),
-        value: bulletMatch[2].trim(),
-        raw: trimmed
-      })
-    } else {
-      descLines.push(trimmed)
-    }
-  }
-
+  let title = ''
+  let badge = ''
+  const descriptions: string[] = []
+  const stats: { key: string; value: string }[] = []
   const features: { name: string; kind: string; text: string }[] = []
-  for (const line of featureLines) {
-    const trimmed = line.trim().replace(/^[-*]\s+/, '')
-    if (!trimmed || trimmed === '（未提供）' || trimmed === '(未提供)') continue
-    const fMatch = /^(.+?)\s*[-—–]\s*(被动|动作|反应)\s*[：:]\s*(.+)$/.exec(
-      trimmed.replace(/\*\*/g, '')
-    )
-    if (fMatch) {
-      features.push({ name: fMatch[1].trim(), kind: fMatch[2].trim(), text: fMatch[3].trim() })
+
+  let inFeatures = false
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    if (line.startsWith('# ')) {
+      title = line.replace(/^#\s+/, '').trim()
+      continue
+    }
+
+    if (/^\*\*(?:T|Tier|位阶)\s*\d+/i.test(line)) {
+      const clean = line.replace(/\*\*/g, '').trim()
+      const tMatch = clean.match(/(?:T|Tier|位阶)\s*([1-4])/i)
+      const typeMatch =
+        Object.keys(TYPES).find(t => clean.includes(t)) ||
+        Object.keys(TYPE_NAMES_ZH).find(t => clean.toLowerCase().includes(t))
+      if (tMatch) {
+        badge = `位阶 ${tMatch[1]} · ${typeMatch ? TYPE_NAMES_ZH[typeMatch] || typeMatch : '标准'}`
+      } else {
+        badge = clean
+      }
+      continue
+    }
+
+    if (line.startsWith('## 特性') || line.startsWith('##特性')) {
+      inFeatures = true
+      continue
+    }
+
+    if (!inFeatures) {
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const item = line.replace(/^[-*]\s+/, '').trim()
+        const match = item.match(/^(?:\*\*)?([^：:*]+?)(?:\*\*)?\s*[：:]\s*(.+)$/)
+        if (match) {
+          const rawKey = match[1].replace(/\*\*/g, '').replace(/[：:]$/, '').trim()
+          let key = rawKey
+          // 普通攻击格式化：若包含待命名或直接是普通攻击
+          if (key.includes('待命名') || key === '普通攻击——普通攻击') {
+            key = '普通攻击'
+          }
+          const value = match[2].replace(/\*\*/g, '').trim()
+          stats.push({ key, value })
+        } else {
+          descriptions.push(item.replace(/\*\*/g, '').trim())
+        }
+      } else {
+        descriptions.push(line.replace(/\*\*/g, '').trim())
+      }
     } else {
-      features.push({ name: trimmed.split(/[：:]/)[0] || '特性', kind: '', text: trimmed })
+      const item = line.replace(/^[-*]\s+/, '').replace(/\*\*/g, '').trim()
+      if (!item || item === '（未提供）' || item === '(未提供)') continue
+      const fMatch = /^(.+?)\s*[-—–]\s*(被动|动作|反应)\s*[：:]\s*(.+)$/.exec(item)
+      if (fMatch) {
+        features.push({ name: fMatch[1].trim(), kind: fMatch[2].trim(), text: fMatch[3].trim() })
+      } else {
+        const parts = item.split(/[：:]/)
+        features.push({
+          name: parts[0] || '特性',
+          kind: '',
+          text: parts.slice(1).join('：') || item
+        })
+      }
     }
   }
 
@@ -1145,46 +1233,26 @@ function RenderedMarkdownCard({
       {title && (
         <h3>
           <span>{title}</span>
-          {badgeText && <span className="card-badge">{badgeText}</span>}
+          {badge && <span className="card-badge">{badge}</span>}
         </h3>
       )}
-      {descLines.length > 0 && (
+      {descriptions.length > 0 && (
         <div className="rendered-card-desc">
-          {descLines.map((d, i) => (
+          {descriptions.map((d, i) => (
             <p key={i}>{d}</p>
           ))}
         </div>
       )}
-      {bulletLines.length > 0 && (
+      {stats.length > 0 && (
         <div className="rendered-card-stats">
-          {bulletLines.map((b, i) => {
-            let rationale: string | undefined
-            if (showRationales && suggestions) {
-              for (const [fKey, fData] of Object.entries(suggestions)) {
-                const label = STAT_LABELS_ZH[fKey]
-                if (label && b.key.includes(label)) {
-                  rationale = fData?.rationale
-                  break
-                }
-              }
-            }
-            return (
-              <div key={i} className="rendered-stat-row">
-                <span className="stat-label">
-                  <b>{b.key}：</b>
-                  {rationale && (
-                    <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
-                      <AlertCircle size={13} />
-                      <span className="tooltip" role="tooltip">
-                        {rationale}
-                      </span>
-                    </span>
-                  )}
-                </span>
-                <span className="stat-value">{b.value}</span>
-              </div>
-            )
-          })}
+          {stats.map((b, i) => (
+            <div key={i} className="rendered-stat-row">
+              <span className="stat-label">
+                <b>{b.key}：</b>
+              </span>
+              <span className="stat-value">{b.value}</span>
+            </div>
+          ))}
         </div>
       )}
       {features.length > 0 && (
@@ -1267,34 +1335,37 @@ function StepContent({
     )
   }
 
+  // 步骤3：全块显示，不需要下面的渲染卡片，全部数据用块显示出来
   if (step === 3) {
+    const suggestions = result.suggestions || {}
     return (
       <div className="step-body">
         <div className="metric-grid">
-          {Object.entries(result.suggestions || {}).map(([k, v]: [string, any]) => (
-            <div key={k}>
-              <div className="metric-header">
-                <span>{STAT_LABELS_ZH[k] || k}</span>
-                {v?.rationale && (
-                  <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
-                    <AlertCircle size={13} />
-                    <span className="tooltip" role="tooltip">
-                      {v.rationale}
+          {Object.entries(suggestions).map(([k, v]: [string, any]) => {
+            let val = String(v?.value ?? '—')
+            if (k === 'attack_name') {
+              if (!val || val === '—' || val === '普通攻击（待命名）' || val.includes('待命名')) {
+                val = '普通攻击'
+              }
+            }
+            return (
+              <div key={k}>
+                <div className="metric-header">
+                  <span>{STAT_LABELS_ZH[k] || k}</span>
+                  {v?.rationale && (
+                    <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
+                      <AlertCircle size={13} />
+                      <span className="tooltip" role="tooltip">
+                        {v.rationale}
+                      </span>
                     </span>
-                  </span>
-                )}
+                  )}
+                </div>
+                <strong>{val}</strong>
               </div>
-              <strong>{String(v?.value ?? '—')}</strong>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        {result.basicCard && (
-          <RenderedMarkdownCard
-            markdown={result.basicCard}
-            suggestions={result.suggestions}
-            showRationales={true}
-          />
-        )}
       </div>
     )
   }
@@ -1380,6 +1451,7 @@ function StepContent({
     )
   }
 
+  // 步骤7：最终完整数据块渲染，复制、插入、覆盖
   if (step === 7) {
     return (
       <div className="step-body">
