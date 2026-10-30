@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "daggerheart-forge-jobs",
+  "main": "index.ts",
+  "compatibility_date": "2026-10-30",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "d1_databases": [{ "binding": "DB", "database_name": "daggerheart-forge", "database_id": "0c516cad-5098-472c-9d17-6294002f9283" }],
+  "workflows": [{ "name": "daggerheart-forge-analysis", "binding": "ANALYSIS", "class_name": "AnalysisWorkflow" }]
+}
