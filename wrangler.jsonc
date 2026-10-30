@@ -3,6 +3,7 @@
   "name": "daggerheart-forge-web",
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-10-30",
+  "vars": { "REGISTRATION_ENABLED": "false" },
   "d1_databases": [{ "binding": "DB", "database_name": "daggerheart-forge", "database_id": "0c516cad-5098-472c-9d17-6294002f9283" }],
   "services": [{ "binding": "FORGE_WORKER", "service": "daggerheart-forge-jobs" }]
 }
