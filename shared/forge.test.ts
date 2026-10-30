@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diceStats, finalCard, matchFeatures, normalize, recommend, selectReferences, terminology, type Card } from './forge'
+import { diceStats, extractMarkdownFeatures, finalCard, matchFeatures, normalize, recommend, selectReferences, terminology, type Card } from './forge'
 import adversaries from '../worker/data/adversaries.json'
 import benchmarks from '../worker/data/benchmarks.json'
 
@@ -11,4 +11,5 @@ describe('敌人锻造数据边界',()=>{
   it('尊重锁定数值并生成可核验骰式',()=>{const refs=selectReferences(enemy,cards),recs=recommend(enemy,refs,bench['1:standard'],cards);expect(recs.difficulty.value).toBe(12);expect(recs.difficulty.locked).toBe(true);expect(diceStats(recs.attack_formula.value)).toEqual(recs.attack_formula.stats);expect(finalCard(enemy,recs)).toContain('盾墙 - 被动')})
   it('特性匹配只引用 SRD，术语建议保留原文',()=>{const matches=matchFeatures(enemy,cards);expect(matches).toHaveLength(1);expect(matches[0].matches.length).toBeLessThanOrEqual(3);expect(matches[0].matches.every(m=>cards.some(c=>c.id===m.adversary_id&&c.source_status==='srd'))).toBe(true);expect(terminology(matches)).toEqual([])})
   it('拒绝无效锁定骰式',()=>expect(()=>normalize({name:'测试',tier:1,type:'标准',locked_stats:{attack_formula:'1x6'}})).toThrow())
+  it('保留模型对象特性与 Markdown 原文，避免转换成对象占位符',()=>{const markdown='**坚韧厚皮 - 被动：** 当土龙受到物理伤害时，伤害减少 3。\n\n**猛咬 - 动作：** 成功时，花费 1 恐惧点。';expect(extractMarkdownFeatures(markdown)).toEqual(['坚韧厚皮 - 被动：当土龙受到物理伤害时，伤害减少 3。','猛咬 - 动作：成功时，花费 1 恐惧点。']);const parsed=normalize({name:'青年土龙兽',tier:1,type:'斗士',features:[{name:'坚韧厚皮',kind:'被动',description:'伤害减少 3。'}]});expect(parsed.features).toEqual(['坚韧厚皮 - 被动： 伤害减少 3。']);expect(parsed.features).not.toContain('[object Object]')})
 })
