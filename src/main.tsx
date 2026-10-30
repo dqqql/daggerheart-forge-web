@@ -1453,10 +1453,12 @@ function StepContent({
   if (step === 4) {
     return (
       <div className="step-body">
-        {result.groups?.map((g: any) => (
+        {result.groups?.map((g: any) => {
+          const originalMatch = g.original.match(/^.*?[-—–]\s*(被动|动作|反应)\s*[：:]\s*([\s\S]*)$/)
+          return (
           <div className="feature-group" key={g.index}>
-            <div className="feature-title">{chineseFeatureName(g.name)}</div>
-            <div className="feature-original">{cleanChineseSpacing(g.original)}</div>
+            <div className="feature-title">{chineseFeatureName(g.name)}{originalMatch ? ` - ${originalMatch[1]}` : ''}</div>
+            <div className="feature-original">{cleanChineseSpacing(originalMatch ? originalMatch[2] : g.original)}</div>
             <hr className="feature-divider" />
             {g.matches?.length ? (
               g.matches.slice(0, 3).map((m: any, i: number) => (
@@ -1476,7 +1478,8 @@ function StepContent({
               <div className="muted">未在官方库中找到足够接近的特性</div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
