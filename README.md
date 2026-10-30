@@ -10,11 +10,11 @@
 
 ## 部署准备
 
-1. 仓库保持私有。`worker/data/adversaries.json` 来源于原 skill 中文站点快照中 `source_status == "srd"` 的 264 条，`benchmarks.json` 为原 skill 固定融合区间；原始 `sources/` 未复制到本仓库。
-2. **公开注册和数据访问前**核对 Darrington Press 许可、中文快照与译文的再分发条件，以及融合区间中第三方资料的使用条件；加入所需署名和许可声明。未完成前，在 Pages 生产环境设置 `REGISTRATION_ENABLED=false`。
+1. 仓库保持私有。`worker/data/adversaries.json` 来源于原 skill 中文站点快照中 `source_status == "srd"` 的 264 条；`benchmarks.json` 只保留融合数值区间和 SRD 样本数，不包含第三方指南原文或历史工作簿内容。原始 `sources/` 未复制到本仓库。
+2. 用户已确认 SRD 内容可以公开分发。站点的“版权与来源”面板载明 DPCGL 2.0、官方 SRD、中文快照及本站的整理修改；SRD 敌人与特性的弹窗仍不设置逐条跳转链接。
 3. D1 数据库名为 `daggerheart-forge`；运行 `npx wrangler d1 migrations apply daggerheart-forge --remote`。两个 Wrangler 配置必须指向同一个 D1 ID。
 4. 先部署内部 Worker：`npx wrangler deploy --config worker/wrangler.jsonc`。它设置了 `workers_dev=false`，只通过 Pages 的 Service Binding 接收启动请求。使用 `npx wrangler secret put ENCRYPTION_KEY --config worker/wrangler.jsonc` 设置密钥。
-5. Cloudflare Pages 项目已连接本私有仓库的 `main`，构建命令为 `npm run build`，输出目录为 `dist`。生产与预览自动部署已关闭，当前没有公开部署。Wrangler 配置含 D1 `DB`、服务绑定 `FORGE_WORKER` 和生产注册开关 `REGISTRATION_ENABLED=false`；Pages Secret `ENCRYPTION_KEY` 已配置。完成资料授权核查并加入所需声明后，将注册开关设为 `true`，再启用部署。
+5. Cloudflare Pages 项目已连接本私有仓库的 `main`，构建命令为 `npm run build`，输出目录为 `dist`。Wrangler 配置含 D1 `DB`、服务绑定 `FORGE_WORKER` 和生产注册开关 `REGISTRATION_ENABLED=true`；Pages Secret `ENCRYPTION_KEY` 已配置。`main` 推送触发生产自动部署。
 
 ## 接口与边界
 
