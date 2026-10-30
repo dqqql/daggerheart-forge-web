@@ -111,7 +111,7 @@ input:focus-visible,
 
 /* 经典 GitHub 深色顶栏 */
 .titlebar {
-  height: 48px;
+  height: 58px;
   background: var(--color-header-bg);
   border-bottom: 1px solid var(--color-header-border);
   display: flex;
@@ -123,7 +123,7 @@ input:focus-visible,
 }
 
 .brand {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   color: #ffffff;
   display: flex;
@@ -150,7 +150,7 @@ input:focus-visible,
 
 .titlebar-center {
   color: var(--color-header-muted);
-  font-size: 13px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -161,6 +161,7 @@ input:focus-visible,
 }
 
 .title-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -182,6 +183,32 @@ input:focus-visible,
   background: var(--color-header-hover);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 178px;
+  padding: 5px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-default);
+  box-shadow: var(--shadow-dropdown);
+  z-index: 20;
+}
+
+.title-actions .settings-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--color-fg-default);
+  font-size: 14px;
+}
+
+.title-actions .settings-menu button:hover {
+  color: var(--color-fg-default);
+  background: var(--color-canvas-subtle);
 }
 
 .workspace {
@@ -388,90 +415,107 @@ input:focus-visible,
   border-bottom: 1px solid var(--color-border-default);
   flex: none;
   display: flex;
-  align-items: flex-end;
-  padding: 0 8px;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tab {
-  min-width: 190px;
-  max-width: 340px;
-  height: 34px;
-  background: var(--color-canvas-default);
-  border: 1px solid var(--color-border-default);
-  border-bottom: 1px solid var(--color-canvas-default);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  min-width: 120px;
+  max-width: 240px;
+  height: 40px;
+  background: var(--color-canvas-subtle);
+  border-right: 1px solid var(--color-border-default);
   color: var(--color-fg-default);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
   font-size: 13px;
-  font-weight: 600;
-  margin-bottom: -1px;
+  flex: none;
 }
+
+.tab.active {
+  background: var(--color-canvas-default);
+  border-bottom: 2px solid var(--color-accent-emphasis);
+}
+
+.tab-select, .tab-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+}
+
+.tab-select {
+  min-width: 0;
+  flex: 1;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  text-align: left;
+}
+
+.tab-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  margin-right: 5px;
+  border-radius: 4px;
+}
+
+.tab-close:hover { background: var(--color-border-default); }
 
 .tab svg {
   color: var(--color-fg-muted);
   flex: none;
 }
 
-.save-state {
-  font-size: 12px;
-  font-weight: normal;
-  color: var(--color-fg-muted);
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.save-state::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+.dirty-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--color-success-emphasis);
+  background: var(--color-fg-muted);
 }
 
-.save-state.pending::before {
-  background: var(--color-attention-emphasis);
-}
-
-.save-state.error::before {
-  background: var(--color-danger-emphasis);
-}
-
-.editor-scroll {
-  overflow-y: auto;
+.code-editor {
   flex: 1;
-  background: var(--color-canvas-default);
-}
-
-.editor-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--color-canvas-subtle);
-  border-bottom: 1px solid var(--color-border-default);
-  padding: 8px 32px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: var(--color-fg-muted);
-  font-size: 12px;
+  min-height: 0;
+  overflow: hidden;
+  font: 14px/22px var(--font-mono);
 }
 
-.editor-toolbar span:first-child {
-  font-weight: 600;
-  color: var(--color-fg-default);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.line-numbers {
+  width: 58px;
+  flex: none;
+  padding: 8px 12px 8px 0;
+  overflow: hidden;
+  text-align: right;
+  color: var(--color-fg-subtle);
   background: var(--color-canvas-default);
-  border: 1px solid var(--color-border-default);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  user-select: none;
+}
+
+.code-editor textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  margin: 0;
+  padding: 8px 16px 8px 0;
+  color: var(--color-fg-default);
+  background: var(--color-canvas-default);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
 }
 
 /* GitHub 风格 Markdown 排版规范 */

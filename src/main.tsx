@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import { Markdown } from '@tiptap/markdown'
 import {
   ChevronDown,
   ChevronRight,
@@ -16,8 +13,6 @@ import {
   Settings2,
   LogOut,
   RotateCcw,
-  PanelLeftClose,
-  PanelRightClose,
   Sparkles,
   Copy,
   Check,
@@ -51,7 +46,9 @@ function App() {
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [content, setContent] = useState('')
-  const [saveState, setSaveState] = useState('已保存')
+  const [openTabs, setOpenTabs] = useState<string[]>([])
+  const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [run, setRun] = useState<Run | null>(null)
   const [keyOpen, setKeyOpen] = useState(false)
   const [apiKey, setApiKey] = useState('')
@@ -60,53 +57,76 @@ function App() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [leftWidth, setLeftWidth] = useState(260)
   const [rightWidth, setRightWidth] = useState(460)
-  const [leftOpen, setLeftOpen] = useState(true)
-  const [rightOpen, setRightOpen] = useState(true)
   const [popups, setPopups] = useState<{ id: string; card: Card; pinned: boolean }[]>([])
   const [creditsOpen, setCreditsOpen] = useState(false)
   const [copiedStep7, setCopiedStep7] = useState(false)
 
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editing = useRef(false)
-  const contentRef = useRef('')
+  const drafts = useRef(new Map<string, string>())
+  const pending = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const saving = useRef(new Map<string, Promise<boolean>>())
+  const versions = useRef(new Map<string, number>())
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
+  const lineNumbers = useRef<HTMLDivElement>(null)
   const selectedNode = nodes.find(n => n.id === selected)
+  const path: string[] = []
+  let ancestor = selectedNode?.parent_id
+  while (ancestor) {
+    const folder = nodes.find(n => n.id === ancestor)
+    if (!folder) break
+    path.unshift(folder.name)
+    ancestor = folder.parent_id
+  }
 
-  async function selectFile(id: string) {
-    if (selected && editing.current) {
-      if (pending.current) clearTimeout(pending.current)
-      try {
-        await api('nodes/' + selected, {
-          method: 'PATCH',
-          body: JSON.stringify({ content: contentRef.current })
-        })
-        editing.current = false
-        setSaveState('已保存')
-      } catch (e) {
-        setError((e as Error).message)
-        return
-      }
-    }
+  function selectFile(id: string) {
+    setOpenTabs(tabs => tabs.includes(id) ? tabs : [...tabs, id])
     setSelected(id)
   }
 
-  const editor = useEditor({
-    extensions: [StarterKit, Markdown],
-    content: '',
-    contentType: 'markdown',
-    editorProps: {
-      attributes: {
-        class: 'editor-body',
-        'aria-label': '敌人 Markdown 编辑区'
+  async function saveFile(id: string): Promise<boolean> {
+    const timer = pending.current.get(id)
+    if (timer) clearTimeout(timer)
+    pending.current.delete(id)
+    const previous = saving.current.get(id) || Promise.resolve(true)
+    const task = previous.then(async () => {
+      const value = drafts.current.get(id)
+      if (value === undefined) return true
+      const version = versions.current.get(id)
+      try {
+        await api('nodes/' + id, { method: 'PATCH', body: JSON.stringify({ content: value }) })
+        if (versions.current.get(id) === version) {
+          setDirtyIds(ids => { const next = new Set(ids); next.delete(id); return next })
+        }
+        return true
+      } catch (e) {
+        setError((e as Error).message)
+        return false
       }
-    },
-    onUpdate: ({ editor }) => {
-      const value = editor.getMarkdown()
-      contentRef.current = value
-      setContent(value)
-      setSaveState('保存中…')
-      editing.current = true
-    }
-  })
+    })
+    saving.current.set(id, task)
+    const result = await task
+    if (saving.current.get(id) === task) saving.current.delete(id)
+    return result
+  }
+
+  function updateContent(value: string) {
+    if (!selected) return
+    drafts.current.set(selected, value)
+    versions.current.set(selected, (versions.current.get(selected) || 0) + 1)
+    setContent(value)
+    setDirtyIds(ids => new Set(ids).add(selected))
+    const timer = pending.current.get(selected)
+    if (timer) clearTimeout(timer)
+    pending.current.set(selected, setTimeout(() => saveFile(selected), 650))
+  }
+
+  async function closeTab(id: string) {
+    if (dirtyIds.has(id) && !(await saveFile(id))) return
+    const index = openTabs.indexOf(id)
+    const remaining = openTabs.filter(tab => tab !== id)
+    setOpenTabs(remaining)
+    if (selected === id) setSelected(remaining[Math.min(index, remaining.length - 1)] || null)
+  }
 
   useEffect(() => {
     api<{ user: User }>('auth/me')
@@ -129,51 +149,28 @@ function App() {
       setRun(null)
       return
     }
+    let active = true
+    setRun(null)
+    const cached = drafts.current.get(selected)
+    setContent(cached ?? '')
     api<{ node: TreeNode }>('nodes/' + selected)
       .then(x => {
-        if (editing.current) return
+        if (drafts.current.has(x.node.id)) return
         const value = x.node.content || ''
-        contentRef.current = value
-        setContent(value)
-        editor?.commands.setContent(value, { contentType: 'markdown' })
-        setSaveState('已保存')
+        drafts.current.set(x.node.id, value)
+        if (active) setContent(value)
       })
       .catch(e => setError(e.message))
 
     api<{ runs: { id: string }[] }>('runs?file=' + selected)
       .then(x => {
+        if (!active) return
         if (x.runs[0]) loadRun(x.runs[0].id)
         else setRun(null)
       })
       .catch(() => {})
-  }, [selected, user, editor])
-
-  useEffect(() => {
-    if (!editing.current || !selected) return
-    if (pending.current) clearTimeout(pending.current)
-    pending.current = setTimeout(async () => {
-      try {
-        const value = contentRef.current
-        await api('nodes/' + selected, {
-          method: 'PATCH',
-          body: JSON.stringify({ content: value })
-        })
-        setNodes(ns =>
-          ns.map(n =>
-            n.id === selected ? { ...n, updated_at: new Date().toISOString() } : n
-          )
-        )
-        setSaveState('已保存')
-        editing.current = false
-      } catch (e) {
-        setSaveState('保存失败')
-        setError((e as Error).message)
-      }
-    }, 650)
-    return () => {
-      if (pending.current) clearTimeout(pending.current)
-    }
-  }, [content, selected])
+    return () => { active = false }
+  }, [selected, user])
 
   useEffect(() => {
     if (!run || !['queued', 'running'].includes(run.status)) return
@@ -184,7 +181,7 @@ function App() {
   async function loadRun(id: string) {
     try {
       const x = await api<{ run: Run }>('runs/' + id)
-      setRun(x.run)
+      setRun(current => selectedRef.current === x.run.file_id ? x.run : current)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -243,6 +240,7 @@ function App() {
           }
         }
         setNodes(ns => ns.filter(n => !remove.has(n.id)))
+        setOpenTabs(tabs => tabs.filter(tab => !remove.has(tab)))
         if (selected && remove.has(selected)) setSelected(null)
       } else {
         const folders = nodes.filter(n => n.kind === 'folder' && n.id !== id)
@@ -296,18 +294,7 @@ function App() {
 
   async function startRun() {
     if (!selected) return
-    if (saveState !== '已保存') {
-      try {
-        await api('nodes/' + selected, {
-          method: 'PATCH',
-          body: JSON.stringify({ content: contentRef.current })
-        })
-        setSaveState('已保存')
-      } catch (e) {
-        setError((e as Error).message)
-        return
-      }
-    }
+    if (dirtyIds.has(selected) && !(await saveFile(selected))) return
     try {
       const x = await api<{ id: string }>('runs', {
         method: 'POST',
@@ -407,7 +394,6 @@ function App() {
           <Flame size={44} color="#1f2328" />
         </div>
         <h1>{authMode === 'login' ? '登录敌人锻炉' : '注册新账号'}</h1>
-        <p>匕首之心 Daggerheart 原创敌人审阅工作台</p>
         
         <div className="auth-card">
           <form onSubmit={submitAuth}>
@@ -480,44 +466,43 @@ function App() {
       <header className="titlebar">
         <div className="brand">
           <span className="brand-icon">
-            <Flame size={18} />
+            <Flame size={22} />
           </span>
           敌人锻炉
-          <span className="brand-badge">SRD 2.0</span>
         </div>
         
         <div className="titlebar-center">
-          <span>工作区</span> / <strong>{selectedNode?.name || '未打开文件'}</strong>
+          <span>工作区</span> / {path.map((name, index) => <React.Fragment key={index}><span>{name}</span> / </React.Fragment>)}<strong>{selectedNode?.name || '未打开文件'}</strong>
         </div>
 
         <div className="title-actions">
-          <button title="切换文件侧栏" onClick={() => setLeftOpen(!leftOpen)}>
-            <PanelLeftClose size={16} />
+          <button title="设置" aria-label="设置" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(open => !open)}>
+            <Settings2 size={19} />
           </button>
-          <button title="切换分析侧栏" onClick={() => setRightOpen(!rightOpen)}>
-            <PanelRightClose size={16} />
-          </button>
-          <button title="设置 API Key" onClick={() => setKeyOpen(true)}>
-            <Settings2 size={16} />
-          </button>
-          <button
-            title="退出登录"
-            onClick={async () => {
+          {settingsOpen && <div className="settings-menu">
+            <button onClick={() => { setKeyOpen(true); setSettingsOpen(false) }}><Key size={16} /> 填写 API Key</button>
+            <button onClick={async () => {
+              const saved = await Promise.all([...dirtyIds].map(id => saveFile(id)))
+              if (saved.some(ok => !ok)) return
               await api('auth/logout', { method: 'POST' })
               setUser(null)
               setNodes([])
               setSelected(null)
-            }}
-          >
-            <LogOut size={16} />
-          </button>
+              setOpenTabs([])
+              setDirtyIds(new Set())
+              drafts.current.clear()
+              pending.current.forEach(timer => clearTimeout(timer))
+              pending.current.clear()
+              versions.current.clear()
+              setSettingsOpen(false)
+            }}><LogOut size={16} /> 退出登录</button>
+          </div>}
         </div>
       </header>
 
       {/* 工作区主布局 */}
       <div className="workspace">
         {/* 左侧资源管理器 */}
-        {leftOpen && (
           <>
             <aside className="explorer" style={{ width: leftWidth }}>
               <div className="pane-heading">
@@ -560,39 +545,44 @@ function App() {
               }}
             />
           </>
-        )}
 
         {/* 中间 Markdown 编辑器 */}
         <main className="editor-pane">
           <div className="tabbar">
-            {selectedNode && (
-              <div className="tab">
-                <FileText size={15} />
-                <span>{selectedNode.name}</span>
-                <span
-                  className={
-                    'save-state ' +
-                    (saveState === '保存中…'
-                      ? 'pending'
-                      : saveState === '保存失败'
-                        ? 'error'
-                        : 'saved')
-                  }
-                >
-                  {saveState}
-                </span>
+            {openTabs.map(id => {
+              const node = nodes.find(n => n.id === id)
+              if (!node) return null
+              return <div className={'tab ' + (selected === id ? 'active' : '')} key={id}>
+                <button className="tab-select" onClick={() => selectFile(id)} title={node.name}>
+                  <FileText size={15} /><span>{node.name}</span>
+                </button>
+                <button className={'tab-close ' + (dirtyIds.has(id) ? 'dirty' : '')} title={dirtyIds.has(id) ? '保存并关闭' : '关闭'} aria-label={`关闭 ${node.name}`} onClick={() => closeTab(id)}>
+                  {dirtyIds.has(id) ? <span className="dirty-dot" /> : <X size={15} />}
+                </button>
               </div>
-            )}
+            })}
           </div>
           {selectedNode ? (
-            <div className="editor-scroll">
-              <div className="editor-toolbar">
-                <span>
-                  <FileText size={13} /> MARKDOWN
-                </span>
-                <span>支持 #、##、-、** 等快捷排版</span>
+            <div className="code-editor">
+              <div className="line-numbers" aria-hidden="true" ref={lineNumbers}>
+                {Array.from({ length: content.split('\n').length }, (_, i) => <div key={i}>{i + 1}</div>)}
               </div>
-              <EditorContent editor={editor} />
+              <textarea
+                aria-label="敌人 Markdown 编辑区"
+                spellCheck={false}
+                value={content}
+                onChange={e => updateContent(e.target.value)}
+                onScroll={e => { if (lineNumbers.current) lineNumbers.current.scrollTop = e.currentTarget.scrollTop }}
+                onKeyDown={e => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault()
+                    const target = e.currentTarget
+                    const start = target.selectionStart
+                    updateContent(content.slice(0, start) + '  ' + content.slice(target.selectionEnd))
+                    requestAnimationFrame(() => { target.selectionStart = target.selectionEnd = start + 2 })
+                  }
+                }}
+              />
             </div>
           ) : (
             <div className="welcome">
@@ -609,7 +599,6 @@ function App() {
         </main>
 
         {/* 右侧敌人分析面板 */}
-        {rightOpen && (
           <>
             <div
               className="resizer"
@@ -622,11 +611,9 @@ function App() {
             />
             <aside className="analysis" style={{ width: rightWidth }}>
               <div className="pane-heading">
-                <span>敌人分析引擎</span>
-                <span className="ai-badge">DEEPSEEK CHAT</span>
+                <span>分析引擎</span>
               </div>
               <div className="run-controls">
-                <p>提取当前文件快照，执行固定七步审阅机制，结果不改动原稿。</p>
                 <button
                   className="primary run-button"
                   disabled={
@@ -640,14 +627,8 @@ function App() {
                   <Play size={15} />
                   {run?.status === 'running' || run?.status === 'queued'
                     ? '分析执行中…'
-                    : '运行敌人锻造'}
+                    : '运行分析'}
                 </button>
-                {!keyReady && (
-                  <button className="inline-link" onClick={() => setKeyOpen(true)}>
-                    <Key size={13} style={{ marginRight: 4 }} />
-                    请先配置 DeepSeek API Key
-                  </button>
-                )}
               </div>
 
               <div className="steps-scroll">
@@ -716,14 +697,11 @@ function App() {
                     <div>
                       <Sparkles size={36} />
                     </div>
-                    <h3>就绪状态</h3>
-                    <p>点击上方“运行敌人锻造”，分析步骤将在此实时推进。</p>
                   </div>
                 )}
               </div>
             </aside>
           </>
-        )}
       </div>
 
       {/* 底部状态栏 */}

@@ -1,6 +1,6 @@
 # 敌人锻炉网页
 
-独立于 `daggerheart-adversary-forge` skill 的桌面网页工程。React + Vite 提供 VS Code 风格的文件树、Markdown 即时排版和七步只读分析；Cloudflare Pages Functions、D1、Worker Workflows 处理账号、保存与后台任务。
+独立于 `daggerheart-adversary-forge` skill 的桌面网页工程。React + Vite 提供 VS Code 风格的文件树、多标签原始 Markdown 编辑器和七步只读分析；Cloudflare Pages Functions、D1、Worker Workflows 处理账号、保存与后台任务。
 
 ## 开发
 

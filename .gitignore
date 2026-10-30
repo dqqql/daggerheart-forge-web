@@ -5,4 +5,5 @@ dist/
 **/.dev.vars
 *.local
 .playwright-mcp/
+.playwright-cli/
 src/assets/hero.png
