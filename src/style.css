@@ -1199,7 +1199,8 @@ input:focus-visible,
 .rationale-btn .tooltip {
   display: none;
   position: absolute;
-  right: -10px;
+  left: auto;
+  right: 0;
   top: calc(100% + 6px);
   width: 260px;
   max-width: 80vw;
