@@ -13,14 +13,17 @@ import {
   Settings2,
   LogOut,
   RotateCcw,
-  Sparkles,
   Copy,
   Check,
   Flame,
-  Key
+  Key,
+  Sun,
+  Moon,
+  AlertCircle,
+  Plus
 } from 'lucide-react'
 import type { Run, TreeNode } from '../shared/types'
-import { STEP_NAMES } from '../shared/types'
+import { STEP_NAMES, TYPES } from '../shared/types'
 import './style.css'
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -37,7 +40,51 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
 type User = { id: string; username: string }
 type Card = any
 
+const TYPE_NAMES_ZH: Record<string, string> = {
+  standard: '标准',
+  bruiser: '斗士',
+  horde: '集群',
+  leader: '头目',
+  minion: '杂兵',
+  ranged: '远程',
+  skulk: '潜伏',
+  social: '社交',
+  solo: '独狼',
+  support: '辅助'
+}
+
+function formatEnemyType(type: string): string {
+  return TYPE_NAMES_ZH[type] || type || '标准'
+}
+
+const STAT_LABELS_ZH: Record<string, string> = {
+  difficulty: '难度',
+  threshold_major: '重度阈值',
+  threshold_severe: '严重阈值',
+  hp: '生命点',
+  stress: '压力点',
+  attack_bonus: '攻击加值',
+  damage_expected: '期望伤害',
+  attack_formula: '攻击骰式',
+  attack_name: '攻击名称',
+  attack_range: '攻击距离',
+  damage_type: '伤害类型',
+  experience: '经历'
+}
+
+type PopupCard = {
+  id: string
+  card: Card
+  pinned: boolean
+  x: number
+  y: number
+  zIndex: number
+}
+
 function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
+  })
   const [user, setUser] = useState<User | null>(null)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
@@ -57,9 +104,11 @@ function App() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [leftWidth, setLeftWidth] = useState(260)
   const [rightWidth, setRightWidth] = useState(460)
-  const [popups, setPopups] = useState<{ id: string; card: Card; pinned: boolean }[]>([])
+  const [popups, setPopups] = useState<PopupCard[]>([])
+  const [hoveredCard, setHoveredCard] = useState<Card | null>(null)
+  const [highestZIndex, setHighestZIndex] = useState(40)
   const [creditsOpen, setCreditsOpen] = useState(false)
-  const [copiedStep7, setCopiedStep7] = useState(false)
+  const [copiedAction, setCopiedAction] = useState<'none' | 'copy' | 'insert' | 'overwrite'>('none')
 
   const drafts = useRef(new Map<string, string>())
   const pending = useRef(new Map<string, ReturnType<typeof setTimeout>>())
@@ -78,8 +127,13 @@ function App() {
     ancestor = folder.parent_id
   }
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
   function selectFile(id: string) {
-    setOpenTabs(tabs => tabs.includes(id) ? tabs : [...tabs, id])
+    setOpenTabs(tabs => (tabs.includes(id) ? tabs : [...tabs, id]))
     setSelected(id)
   }
 
@@ -95,7 +149,11 @@ function App() {
       try {
         await api('nodes/' + id, { method: 'PATCH', body: JSON.stringify({ content: value }) })
         if (versions.current.get(id) === version) {
-          setDirtyIds(ids => { const next = new Set(ids); next.delete(id); return next })
+          setDirtyIds(ids => {
+            const next = new Set(ids)
+            next.delete(id)
+            return next
+          })
         }
         return true
       } catch (e) {
@@ -169,7 +227,9 @@ function App() {
         else setRun(null)
       })
       .catch(() => {})
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [selected, user])
 
   useEffect(() => {
@@ -181,7 +241,7 @@ function App() {
   async function loadRun(id: string) {
     try {
       const x = await api<{ run: Run }>('runs/' + id)
-      setRun(current => selectedRef.current === x.run.file_id ? x.run : current)
+      setRun(current => (selectedRef.current === x.run.file_id ? x.run : current))
     } catch (e) {
       setError((e as Error).message)
     }
@@ -264,9 +324,7 @@ function App() {
         }
         await api('nodes/' + id, {
           method: 'PATCH',
-          body: JSON.stringify(
-            operation === 'rename' ? { name: value } : { parent_id: target }
-          )
+          body: JSON.stringify(operation === 'rename' ? { name: value } : { parent_id: target })
         })
         setNodes(ns =>
           ns.map(n =>
@@ -307,17 +365,79 @@ function App() {
   }
 
   function openCard(card: Card) {
-    setPopups(ps =>
-      ps.some(p => p.id === card.id)
-        ? ps
-        : [...ps.filter(p => p.pinned), { id: card.id, card, pinned: false }]
-    )
+    setHoveredCard(null)
+    setHighestZIndex(prevZ => {
+      const nextZ = prevZ + 1
+      setPopups(ps => {
+        const existing = ps.find(p => p.id === card.id)
+        if (existing) {
+          return ps.map(p => (p.id === card.id ? { ...p, zIndex: nextZ } : p))
+        }
+        const cardWidth = 380
+        const stagger = (ps.length % 5) * 28
+        const dividerX = window.innerWidth - rightWidth
+        const initX = Math.max(16, dividerX - cardWidth - 16 - stagger)
+        const initY = 72 + stagger
+        return [...ps, { id: card.id, card, pinned: false, x: initX, y: initY, zIndex: nextZ }]
+      })
+      return nextZ
+    })
+  }
+
+  function handlePopupPointerDown(id: string, e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest('button')) return
+    const currentPopup = popups.find(p => p.id === id)
+    if (!currentPopup) return
+
+    const startX = e.clientX
+    const startY = e.clientY
+    const origX = currentPopup.x
+    const origY = currentPopup.y
+    const nextZ = highestZIndex + 1
+    setHighestZIndex(nextZ)
+
+    setPopups(ps => ps.map(p => (p.id === id ? { ...p, zIndex: nextZ } : p)))
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      const nextX = Math.max(10, Math.min(window.innerWidth - 320, origX + dx))
+      const nextY = Math.max(10, Math.min(window.innerHeight - 80, origY + dy))
+      setPopups(ps => ps.map(p => (p.id === id ? { ...p, x: nextX, y: nextY, zIndex: nextZ } : p)))
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
   }
 
   function copyFinalMarkdown(text: string) {
     navigator.clipboard.writeText(text)
-    setCopiedStep7(true)
-    setTimeout(() => setCopiedStep7(false), 2000)
+    setCopiedAction('copy')
+    setTimeout(() => setCopiedAction('none'), 2000)
+  }
+
+  function insertFinalMarkdown(text: string) {
+    if (!selected) return
+    const sep = content.trim() ? '\n\n---\n\n' : ''
+    const next = content.trimEnd() + sep + text
+    updateContent(next)
+    setCopiedAction('insert')
+    setTimeout(() => setCopiedAction('none'), 2000)
+  }
+
+  function overwriteFinalMarkdown(text: string) {
+    if (!selected) return
+    if (content.trim() && !confirm('确定用推荐的完整数据块覆盖当前文件内容吗？已修改未保存的草稿将被替换。')) {
+      return
+    }
+    updateContent(text)
+    setCopiedAction('overwrite')
+    setTimeout(() => setCopiedAction('none'), 2000)
   }
 
   function renderNode(node: TreeNode, depth = 0): React.ReactNode {
@@ -358,7 +478,7 @@ function App() {
             {node.kind === 'folder' ? (
               <Folder size={15} color="#54aeff" />
             ) : (
-              <FileText size={15} color="#656d76" />
+              <FileText size={15} color="var(--color-fg-muted)" />
             )}
             <span>{node.name}</span>
           </button>
@@ -391,10 +511,10 @@ function App() {
     return (
       <main className="auth-screen">
         <div className="auth-mark">
-          <Flame size={44} color="#1f2328" />
+          <Flame size={44} color="var(--color-fg-default)" />
         </div>
         <h1>{authMode === 'login' ? '登录敌人锻炉' : '注册新账号'}</h1>
-        
+
         <div className="auth-card">
           <form onSubmit={submitAuth}>
             <label>
@@ -470,81 +590,114 @@ function App() {
           </span>
           敌人锻炉
         </div>
-        
+
         <div className="titlebar-center">
-          <span>工作区</span> / {path.map((name, index) => <React.Fragment key={index}><span>{name}</span> / </React.Fragment>)}<strong>{selectedNode?.name || '未打开文件'}</strong>
+          <span>工作区</span> /{' '}
+          {path.map((name, index) => (
+            <React.Fragment key={index}>
+              <span>{name}</span> /{' '}
+            </React.Fragment>
+          ))}
+          <strong>{selectedNode?.name || '未打开文件'}</strong>
         </div>
 
         <div className="title-actions">
-          <button title="设置" aria-label="设置" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(open => !open)}>
+          <button
+            title={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
+            aria-label="切换深色/浅色模式"
+            onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button
+            title="设置"
+            aria-label="设置"
+            aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen(open => !open)}
+          >
             <Settings2 size={19} />
           </button>
-          {settingsOpen && <div className="settings-menu">
-            <button onClick={() => { setKeyOpen(true); setSettingsOpen(false) }}><Key size={16} /> 填写 API Key</button>
-            <button onClick={async () => {
-              const saved = await Promise.all([...dirtyIds].map(id => saveFile(id)))
-              if (saved.some(ok => !ok)) return
-              await api('auth/logout', { method: 'POST' })
-              setUser(null)
-              setNodes([])
-              setSelected(null)
-              setOpenTabs([])
-              setDirtyIds(new Set())
-              drafts.current.clear()
-              pending.current.forEach(timer => clearTimeout(timer))
-              pending.current.clear()
-              versions.current.clear()
-              setSettingsOpen(false)
-            }}><LogOut size={16} /> 退出登录</button>
-          </div>}
+          {settingsOpen && (
+            <div className="settings-menu">
+              <button onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}>
+                {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                {theme === 'dark' ? '浅色模式' : '深色模式'}
+              </button>
+              <button
+                onClick={() => {
+                  setKeyOpen(true)
+                  setSettingsOpen(false)
+                }}
+              >
+                <Key size={16} /> 填写 API Key
+              </button>
+              <button
+                onClick={async () => {
+                  const saved = await Promise.all([...dirtyIds].map(id => saveFile(id)))
+                  if (saved.some(ok => !ok)) return
+                  await api('auth/logout', { method: 'POST' })
+                  setUser(null)
+                  setNodes([])
+                  setSelected(null)
+                  setOpenTabs([])
+                  setDirtyIds(new Set())
+                  drafts.current.clear()
+                  pending.current.forEach(timer => clearTimeout(timer))
+                  pending.current.clear()
+                  versions.current.clear()
+                  setSettingsOpen(false)
+                }}
+              >
+                <LogOut size={16} /> 退出登录
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       {/* 工作区主布局 */}
       <div className="workspace">
         {/* 左侧资源管理器 */}
-          <>
-            <aside className="explorer" style={{ width: leftWidth }}>
-              <div className="pane-heading">
-                <span>资源管理器</span>
-                <div>
-                  <button title="新建敌人" onClick={() => create('file')}>
-                    <FilePlus2 size={15} />
-                  </button>
-                  <button title="新建文件夹" onClick={() => create('folder')}>
-                    <FolderPlus size={15} />
-                  </button>
-                </div>
-              </div>
-              <div className="section-caption">
-                我的敌人 <span>{nodes.filter(n => n.kind === 'file').length}</span>
-              </div>
-              <nav aria-label="文件树">
-                {nodes
-                  .filter(n => !n.parent_id)
-                  .sort((a, b) =>
-                    a.kind === b.kind
-                      ? a.name.localeCompare(b.name)
-                      : a.kind === 'folder'
-                        ? -1
-                        : 1
-                  )
-                  .map(n => renderNode(n))}
-              </nav>
-              {nodes.length === 0 && (
-                <div className="empty-tree">点击右上角图标新建敌人文件。</div>
-              )}
-            </aside>
-            <div
-              className="resizer"
-              onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
-              onPointerMove={e => {
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-                  setLeftWidth(Math.max(200, Math.min(460, e.clientX)))
-                }
-              }}
-            />
-          </>
+        <aside className="explorer" style={{ width: leftWidth }}>
+          <div className="pane-heading">
+            <span>资源管理器</span>
+            <div>
+              <button title="新建敌人" onClick={() => create('file')}>
+                <FilePlus2 size={15} />
+              </button>
+              <button title="新建文件夹" onClick={() => create('folder')}>
+                <FolderPlus size={15} />
+              </button>
+            </div>
+          </div>
+          <div className="section-caption">
+            我的敌人 <span>{nodes.filter(n => n.kind === 'file').length}</span>
+          </div>
+          <nav aria-label="文件树">
+            {nodes
+              .filter(n => !n.parent_id)
+              .sort((a, b) =>
+                a.kind === b.kind
+                  ? a.name.localeCompare(b.name)
+                  : a.kind === 'folder'
+                    ? -1
+                    : 1
+              )
+              .map(n => renderNode(n))}
+          </nav>
+          {nodes.length === 0 && (
+            <div className="empty-tree">点击右上角图标新建敌人文件。</div>
+          )}
+        </aside>
+        <div
+          className="resizer"
+          onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
+          onPointerMove={e => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+              setLeftWidth(Math.max(200, Math.min(460, e.clientX)))
+            }
+          }}
+        />
 
         {/* 中间 Markdown 编辑器 */}
         <main className="editor-pane">
@@ -552,34 +705,48 @@ function App() {
             {openTabs.map(id => {
               const node = nodes.find(n => n.id === id)
               if (!node) return null
-              return <div className={'tab ' + (selected === id ? 'active' : '')} key={id}>
-                <button className="tab-select" onClick={() => selectFile(id)} title={node.name}>
-                  <FileText size={15} /><span>{node.name}</span>
-                </button>
-                <button className={'tab-close ' + (dirtyIds.has(id) ? 'dirty' : '')} title={dirtyIds.has(id) ? '保存并关闭' : '关闭'} aria-label={`关闭 ${node.name}`} onClick={() => closeTab(id)}>
-                  {dirtyIds.has(id) ? <span className="dirty-dot" /> : <X size={15} />}
-                </button>
-              </div>
+              return (
+                <div className={'tab ' + (selected === id ? 'active' : '')} key={id}>
+                  <button className="tab-select" onClick={() => selectFile(id)} title={node.name}>
+                    <FileText size={15} />
+                    <span>{node.name}</span>
+                  </button>
+                  <button
+                    className={'tab-close ' + (dirtyIds.has(id) ? 'dirty' : '')}
+                    title={dirtyIds.has(id) ? '保存并关闭' : '关闭'}
+                    aria-label={`关闭 ${node.name}`}
+                    onClick={() => closeTab(id)}
+                  >
+                    {dirtyIds.has(id) ? <span className="dirty-dot" /> : <X size={15} />}
+                  </button>
+                </div>
+              )
             })}
           </div>
           {selectedNode ? (
             <div className="code-editor">
               <div className="line-numbers" aria-hidden="true" ref={lineNumbers}>
-                {Array.from({ length: content.split('\n').length }, (_, i) => <div key={i}>{i + 1}</div>)}
+                {Array.from({ length: content.split('\n').length }, (_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
               </div>
               <textarea
                 aria-label="敌人 Markdown 编辑区"
                 spellCheck={false}
                 value={content}
                 onChange={e => updateContent(e.target.value)}
-                onScroll={e => { if (lineNumbers.current) lineNumbers.current.scrollTop = e.currentTarget.scrollTop }}
+                onScroll={e => {
+                  if (lineNumbers.current) lineNumbers.current.scrollTop = e.currentTarget.scrollTop
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Tab') {
                     e.preventDefault()
                     const target = e.currentTarget
                     const start = target.selectionStart
                     updateContent(content.slice(0, start) + '  ' + content.slice(target.selectionEnd))
-                    requestAnimationFrame(() => { target.selectionStart = target.selectionEnd = start + 2 })
+                    requestAnimationFrame(() => {
+                      target.selectionStart = target.selectionEnd = start + 2
+                    })
                   }
                 }}
               />
@@ -599,109 +766,128 @@ function App() {
         </main>
 
         {/* 右侧敌人分析面板 */}
-          <>
-            <div
-              className="resizer"
-              onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
-              onPointerMove={e => {
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-                  setRightWidth(Math.max(360, Math.min(760, window.innerWidth - e.clientX)))
+        <div
+          className="resizer"
+          onPointerDown={e => e.currentTarget.setPointerCapture(e.pointerId)}
+          onPointerMove={e => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+              setRightWidth(Math.max(360, Math.min(760, window.innerWidth - e.clientX)))
+            }
+          }}
+        />
+        <aside className="analysis" style={{ width: rightWidth }}>
+          <div className="pane-heading">
+            <span>分析引擎</span>
+          </div>
+
+          {/* 运行过时在顶部展示运行按钮（居中、非满宽）；未运行过时不在此处占条 */}
+          {run && (
+            <div className="run-controls">
+              <button
+                className="primary run-button"
+                disabled={
+                  !selected ||
+                  !keyReady ||
+                  run?.status === 'running' ||
+                  run?.status === 'queued'
                 }
-              }}
-            />
-            <aside className="analysis" style={{ width: rightWidth }}>
-              <div className="pane-heading">
-                <span>分析引擎</span>
-              </div>
-              <div className="run-controls">
+                onClick={startRun}
+              >
+                <Play size={15} />
+                {run?.status === 'running' || run?.status === 'queued'
+                  ? '分析执行中…'
+                  : '重新运行分析'}
+              </button>
+            </div>
+          )}
+
+          <div className="steps-scroll">
+            {run ? (
+              <>
+                <div className="run-meta">
+                  任务时间：{new Date(run.created_at).toLocaleString('zh-CN')} ·{' '}
+                  {run.status === 'done'
+                    ? '全部完成'
+                    : run.status === 'failed'
+                      ? '执行异常'
+                      : '分析中'}
+                </div>
+                <div className="progress-track">
+                  <div
+                    style={{
+                      width: `${(run.steps.filter(s => s.status === 'done').length / 7) * 100}%`
+                    }}
+                  />
+                </div>
+                {run.steps.map(s => (
+                  <section className={'step-card ' + s.status} key={s.step}>
+                    <div className="step-head">
+                      <span className="step-number">#{s.step}</span>
+                      <h3>{STEP_NAMES[s.step - 1]}</h3>
+                      <span className="step-status">
+                        {s.status === 'done'
+                          ? '完成'
+                          : s.status === 'running'
+                            ? '执行中'
+                            : s.status === 'failed'
+                              ? '失败'
+                              : '待执行'}
+                      </span>
+                    </div>
+                    {s.status === 'failed' && <div className="error">{s.error}</div>}
+                    {s.result !== null && (
+                      <StepContent
+                        step={s.step}
+                        result={s.result}
+                        openCard={openCard}
+                        onHoverCard={setHoveredCard}
+                        onCopyFinal={copyFinalMarkdown}
+                        onInsertFinal={insertFinalMarkdown}
+                        onOverwriteFinal={overwriteFinalMarkdown}
+                        copiedAction={copiedAction}
+                        step3Warnings={
+                          (run.steps.find(st => st.step === 3)?.result as any)?.warnings
+                        }
+                      />
+                    )}
+                  </section>
+                ))}
+                {run.status === 'failed' && (
+                  <button
+                    className="secondary retry"
+                    onClick={async () => {
+                      try {
+                        await api('runs/' + run.id + '/retry', { method: 'POST' })
+                        loadRun(run.id)
+                      } catch (e) {
+                        setError((e as Error).message)
+                      }
+                    }}
+                  >
+                    <RotateCcw size={14} /> 重试失败步骤
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="analysis-empty">
                 <button
                   className="primary run-button"
-                  disabled={
-                    !selected ||
-                    !keyReady ||
-                    run?.status === 'running' ||
-                    run?.status === 'queued'
-                  }
+                  disabled={!selected || !keyReady}
                   onClick={startRun}
                 >
-                  <Play size={15} />
-                  {run?.status === 'running' || run?.status === 'queued'
-                    ? '分析执行中…'
-                    : '运行分析'}
+                  <Play size={15} /> 运行分析
                 </button>
-              </div>
-
-              <div className="steps-scroll">
-                {run ? (
-                  <>
-                    <div className="run-meta">
-                      任务时间：{new Date(run.created_at).toLocaleString('zh-CN')} ·{' '}
-                      {run.status === 'done'
-                        ? '全部完成'
-                        : run.status === 'failed'
-                          ? '执行异常'
-                          : '分析中'}
-                    </div>
-                    <div className="progress-track">
-                      <div
-                        style={{
-                          width: `${(run.steps.filter(s => s.status === 'done').length / 7) * 100}%`
-                        }}
-                      />
-                    </div>
-                    {run.steps.map(s => (
-                      <section className={'step-card ' + s.status} key={s.step}>
-                        <div className="step-head">
-                          <span className="step-number">#{s.step}</span>
-                          <h3>{STEP_NAMES[s.step - 1]}</h3>
-                          <span className="step-status">
-                            {s.status === 'done'
-                              ? '完成'
-                              : s.status === 'running'
-                                ? '执行中'
-                                : s.status === 'failed'
-                                  ? '失败'
-                                  : '待执行'}
-                          </span>
-                        </div>
-                        {s.status === 'failed' && <div className="error">{s.error}</div>}
-                        {s.result !== null && (
-                          <StepContent
-                            step={s.step}
-                            result={s.result}
-                            openCard={openCard}
-                            onCopyFinal={copyFinalMarkdown}
-                            copied={copiedStep7}
-                          />
-                        )}
-                      </section>
-                    ))}
-                    {run.status === 'failed' && (
-                      <button
-                        className="secondary retry"
-                        onClick={async () => {
-                          try {
-                            await api('runs/' + run.id + '/retry', { method: 'POST' })
-                            loadRun(run.id)
-                          } catch (e) {
-                            setError((e as Error).message)
-                          }
-                        }}
-                      >
-                        <RotateCcw size={14} /> 重试失败步骤
-                      </button>
-                    )}
-                  </>
+                {!selected ? (
+                  <p>请先从左侧打开一个敌人文件</p>
+                ) : !keyReady ? (
+                  <p>请先在右上角设置中填写 DeepSeek API Key</p>
                 ) : (
-                  <div className="analysis-empty">
-                    <div>
-                      <Sparkles size={36} />
-                    </div>
-                  </div>
+                  <p>点击上方按钮开始执行 Daggerheart 7步标准分析</p>
                 )}
               </div>
-            </aside>
-          </>
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* 底部状态栏 */}
@@ -765,26 +951,78 @@ function App() {
       {/* 版权与来源弹窗 */}
       {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
 
-      {/* 浮动 SRD 怪物卡片 */}
-      {popups.map((p, i) => (
+      {/* 悬浮预览窗口（鼠标离开消失，不遮挡操作） */}
+      {hoveredCard && !popups.some(p => p.id === hoveredCard.id) && (
+        <div
+          className="card-hover-preview"
+          style={{
+            right: rightWidth + 16,
+            top: 80
+          }}
+        >
+          <div className="popup-head">
+            <strong>{hoveredCard.name_zh}</strong>
+            <span>
+              位阶 {hoveredCard.tier} · {formatEnemyType(hoveredCard.type)}
+            </span>
+            <span className="hover-badge">悬浮预览</span>
+          </div>
+          <div className="popup-body">
+            <p>{hoveredCard.description}</p>
+            {hoveredCard.motives_tactics && (
+              <p>
+                <b>动机与战术：</b>
+                {hoveredCard.motives_tactics}
+              </p>
+            )}
+            <div className="stats-line">
+              难度 {hoveredCard.difficulty ?? '—'} · 重度阈值 {hoveredCard.threshold_major ?? '—'}／严重阈值{' '}
+              {hoveredCard.threshold_severe ?? '—'} · 生命点 {hoveredCard.hp ?? '—'} · 压力点{' '}
+              {hoveredCard.stress ?? '—'}
+            </div>
+            {hoveredCard.attack_name && (
+              <p>
+                <b>普通攻击：</b>
+                {hoveredCard.attack_name} · {hoveredCard.attack_range} · {hoveredCard.attack_formula}{' '}
+                {hoveredCard.damage_type}
+              </p>
+            )}
+            {hoveredCard.features?.map((f: any, j: number) => (
+              <div className="popup-feature" key={j}>
+                <b>
+                  {f.name} · {f.kind}
+                </b>
+                <p>{f.text || f.full_text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 点击弹出的 SRD 怪物卡片：位于分界栏左侧、可拖动、可钉住、可删除、自动错开 */}
+      {popups.map(p => (
         <div
           className="card-popup"
           key={p.id}
           style={{
-            right: Math.max(24, rightWidth - 40) + (i % 3) * 32,
-            top: 72 + (i % 4) * 36,
-            zIndex: 40 + i
+            left: p.x,
+            top: p.y,
+            zIndex: p.zIndex
           }}
           role="dialog"
           aria-label={p.card.name_zh}
         >
-          <div className="popup-head">
+          <div
+            className="popup-head"
+            onPointerDown={e => handlePopupPointerDown(p.id, e)}
+            title="按住标题栏拖动窗口"
+          >
             <strong>{p.card.name_zh}</strong>
             <span>
-              T{p.card.tier} · {p.card.type}
+              位阶 {p.card.tier} · {formatEnemyType(p.card.type)}
             </span>
             <button
-              title={p.pinned ? '取消固定' : '固定到前台'}
+              title={p.pinned ? '取消钉住' : '钉住到前台'}
               className={p.pinned ? 'pinned' : ''}
               onClick={() =>
                 setPopups(ps =>
@@ -795,7 +1033,7 @@ function App() {
               <Pin size={15} />
             </button>
             <button
-              title="关闭"
+              title="关闭 / 删除"
               onClick={() => setPopups(ps => ps.filter(x => x.id !== p.id))}
             >
               <X size={15} />
@@ -803,25 +1041,30 @@ function App() {
           </div>
           <div className="popup-body">
             <p>{p.card.description}</p>
-            <p>
-              <b>动机与战术：</b>
-              {p.card.motives_tactics}
-            </p>
+            {p.card.motives_tactics && (
+              <p>
+                <b>动机与战术：</b>
+                {p.card.motives_tactics}
+              </p>
+            )}
             <div className="stats-line">
-              难度 {p.card.difficulty} · 阈值 {p.card.threshold_major}/
-              {p.card.threshold_severe} · 生命 {p.card.hp} · 压力 {p.card.stress}
+              难度 {p.card.difficulty ?? '—'} · 重度阈值 {p.card.threshold_major ?? '—'}／严重阈值{' '}
+              {p.card.threshold_severe ?? '—'} · 生命点 {p.card.hp ?? '—'} · 压力点{' '}
+              {p.card.stress ?? '—'}
             </div>
-            <p>
-              <b>攻击：</b>
-              {p.card.attack_name} · {p.card.attack_range} · {p.card.attack_formula}{' '}
-              {p.card.damage_type}
-            </p>
+            {p.card.attack_name && (
+              <p>
+                <b>普通攻击：</b>
+                {p.card.attack_name} · {p.card.attack_range} · {p.card.attack_formula}{' '}
+                {p.card.damage_type}
+              </p>
+            )}
             {p.card.features?.map((f: any, j: number) => (
               <div className="popup-feature" key={j}>
                 <b>
                   {f.name} · {f.kind}
                 </b>
-                <p>{f.full_text}</p>
+                <p>{f.text || f.full_text}</p>
               </div>
             ))}
           </div>
@@ -831,29 +1074,175 @@ function App() {
   )
 }
 
+function RenderedMarkdownCard({
+  markdown,
+  suggestions,
+  showRationales
+}: {
+  markdown: string
+  suggestions?: Record<string, any>
+  showRationales?: boolean
+}) {
+  const lines = markdown.split(/\r?\n/)
+  const titleLine = lines.find(l => /^#\s+/.test(l))
+  const title = titleLine ? titleLine.replace(/^#\s+/, '').trim() : ''
+
+  const badgeLine = lines.find(l => /^\*\*(?:T|Tier|位阶)\s*\d+/i.test(l.trim()))
+  let badgeText = ''
+  if (badgeLine) {
+    const rawBadge = badgeLine.replace(/\*\*/g, '').trim()
+    const tierMatch = rawBadge.match(/(?:T|Tier|位阶)\s*([1-4])/i)
+    const typeMatch =
+      Object.keys(TYPES).find(t => rawBadge.includes(t)) ||
+      Object.keys(TYPE_NAMES_ZH).find(t => rawBadge.toLowerCase().includes(t))
+    if (tierMatch) {
+      badgeText = `位阶 ${tierMatch[1]} · ${
+        typeMatch ? TYPE_NAMES_ZH[typeMatch] || typeMatch : '标准'
+      }`
+    } else {
+      badgeText = rawBadge
+    }
+  }
+
+  const featureHeaderIndex = lines.findIndex(l => /^##\s*特性/.test(l.trim()))
+  const metaLines = featureHeaderIndex >= 0 ? lines.slice(0, featureHeaderIndex) : lines
+  const featureLines = featureHeaderIndex >= 0 ? lines.slice(featureHeaderIndex + 1) : []
+
+  const descLines: string[] = []
+  const bulletLines: { key: string; value: string; raw: string }[] = []
+
+  for (const line of metaLines) {
+    const trimmed = line.trim()
+    if (!trimmed || /^#\s+/.test(trimmed) || /^\*\*(?:T|Tier|位阶)/i.test(trimmed)) continue
+    const bulletMatch = /^[-*]\s*(?:\*\*)?([^：:]+?)(?:\*\*)?\s*[：:]\s*(.+)$/.exec(trimmed)
+    if (bulletMatch) {
+      bulletLines.push({
+        key: bulletMatch[1].replace(/\*\*/g, '').trim(),
+        value: bulletMatch[2].trim(),
+        raw: trimmed
+      })
+    } else {
+      descLines.push(trimmed)
+    }
+  }
+
+  const features: { name: string; kind: string; text: string }[] = []
+  for (const line of featureLines) {
+    const trimmed = line.trim().replace(/^[-*]\s+/, '')
+    if (!trimmed || trimmed === '（未提供）' || trimmed === '(未提供)') continue
+    const fMatch = /^(.+?)\s*[-—–]\s*(被动|动作|反应)\s*[：:]\s*(.+)$/.exec(
+      trimmed.replace(/\*\*/g, '')
+    )
+    if (fMatch) {
+      features.push({ name: fMatch[1].trim(), kind: fMatch[2].trim(), text: fMatch[3].trim() })
+    } else {
+      features.push({ name: trimmed.split(/[：:]/)[0] || '特性', kind: '', text: trimmed })
+    }
+  }
+
+  return (
+    <div className="rendered-card">
+      {title && (
+        <h3>
+          <span>{title}</span>
+          {badgeText && <span className="card-badge">{badgeText}</span>}
+        </h3>
+      )}
+      {descLines.length > 0 && (
+        <div className="rendered-card-desc">
+          {descLines.map((d, i) => (
+            <p key={i}>{d}</p>
+          ))}
+        </div>
+      )}
+      {bulletLines.length > 0 && (
+        <div className="rendered-card-stats">
+          {bulletLines.map((b, i) => {
+            let rationale: string | undefined
+            if (showRationales && suggestions) {
+              for (const [fKey, fData] of Object.entries(suggestions)) {
+                const label = STAT_LABELS_ZH[fKey]
+                if (label && b.key.includes(label)) {
+                  rationale = fData?.rationale
+                  break
+                }
+              }
+            }
+            return (
+              <div key={i} className="rendered-stat-row">
+                <span className="stat-label">
+                  <b>{b.key}：</b>
+                  {rationale && (
+                    <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
+                      <AlertCircle size={13} />
+                      <span className="tooltip" role="tooltip">
+                        {rationale}
+                      </span>
+                    </span>
+                  )}
+                </span>
+                <span className="stat-value">{b.value}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {features.length > 0 && (
+        <div className="rendered-card-section">
+          <h4>特性</h4>
+          <div className="rendered-features-list">
+            {features.map((f, i) => (
+              <div key={i} className="rendered-feature-item">
+                <div className="rendered-feature-head">
+                  <span className="rendered-feature-name">{f.name}</span>
+                  {f.kind && <span className="rendered-feature-kind">{f.kind}</span>}
+                </div>
+                <div className="rendered-feature-text">{f.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StepContent({
   step,
   result,
   openCard,
+  onHoverCard,
   onCopyFinal,
-  copied
+  onInsertFinal,
+  onOverwriteFinal,
+  copiedAction,
+  step3Warnings
 }: {
   step: number
   result: any
   openCard: (card: any) => void
+  onHoverCard?: (card: any) => void
   onCopyFinal?: (text: string) => void
-  copied?: boolean
+  onInsertFinal?: (text: string) => void
+  onOverwriteFinal?: (text: string) => void
+  copiedAction?: 'none' | 'copy' | 'insert' | 'overwrite'
+  step3Warnings?: string[]
 }) {
   if (step === 1) {
     return (
       <div className="step-body">
-        {result.refs?.map((r: any) => (
+        {result.refs?.map((r: any, idx: number) => (
           <div className="ref-row" key={r.card.id}>
-            <button className="srd-enemy" onClick={() => openCard(r.card)}>
-              {r.label} · {r.card.name_zh}
+            <button
+              className="srd-enemy"
+              onClick={() => openCard(r.card)}
+              onMouseEnter={() => onHoverCard && onHoverCard(r.card)}
+              onMouseLeave={() => onHoverCard && onHoverCard(null)}
+            >
+              参考 {idx + 1} · {r.card.name_zh}
             </button>
             <span>
-              T{r.card.tier} · {r.card.type}
+              位阶 {r.card.tier} · {formatEnemyType(r.card.type)}
             </span>
             <p>{r.reason}</p>
           </div>
@@ -865,11 +1254,11 @@ function StepContent({
   if (step === 2) {
     return (
       <div className="step-body">
-        <p>官方 SRD 样本 {result.sample_count} 条 · 融合数值区间</p>
+        <p>官方 SRD 样本 {result.sample_count} 条</p>
         <div className="metric-grid">
           {Object.entries(result.ranges || {}).map(([k, v]: [string, any]) => (
             <div key={k}>
-              <span>{k}</span>
+              <span>{STAT_LABELS_ZH[k] || k}</span>
               <strong>{v?.range?.join('–') || '—'}</strong>
             </div>
           ))}
@@ -883,18 +1272,29 @@ function StepContent({
       <div className="step-body">
         <div className="metric-grid">
           {Object.entries(result.suggestions || {}).map(([k, v]: [string, any]) => (
-            <div key={k} title={v.rationale}>
-              <span>{k}</span>
-              <strong>{String(v.value ?? '—')}</strong>
+            <div key={k}>
+              <div className="metric-header">
+                <span>{STAT_LABELS_ZH[k] || k}</span>
+                {v?.rationale && (
+                  <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
+                    <AlertCircle size={13} />
+                    <span className="tooltip" role="tooltip">
+                      {v.rationale}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <strong>{String(v?.value ?? '—')}</strong>
             </div>
           ))}
         </div>
-        {result.basicCard && <pre className="final-card">{result.basicCard}</pre>}
-        {result.warnings?.map((w: string, i: number) => (
-          <p key={i} className="notice">
-            {w}
-          </p>
-        ))}
+        {result.basicCard && (
+          <RenderedMarkdownCard
+            markdown={result.basicCard}
+            suggestions={result.suggestions}
+            showRationales={true}
+          />
+        )}
       </div>
     )
   }
@@ -904,28 +1304,25 @@ function StepContent({
       <div className="step-body">
         {result.groups?.map((g: any) => (
           <div className="feature-group" key={g.index}>
-            <b>{g.name}</b>
-            <p>{g.original}</p>
+            <div className="feature-title">{g.name}</div>
+            <div className="feature-original">{g.original}</div>
+            <hr className="feature-divider" />
             {g.matches?.length ? (
-              g.matches.map((m: any, i: number) => (
-                <div key={i} className="feature-match">
-                  <button className="srd-feature">
+              g.matches.slice(0, 3).map((m: any, i: number) => (
+                <div key={i} className="feature-match-item">
+                  <div className="feature-match-title">
                     <span>
                       {m.adversary} · {m.feature}
                     </span>
-                    <span className="tooltip" role="tooltip">
-                      <b>
-                        {m.adversary}｜{m.feature}
-                      </b>
-                      <br />
-                      {m.text}
+                    <span className="feature-match-tag">
+                      位阶 {m.tier} · {formatEnemyType(m.type)}
                     </span>
-                  </button>
-                  <span>{m.text}</span>
+                  </div>
+                  <div className="feature-match-body">{m.text}</div>
                 </div>
               ))
             ) : (
-              <span className="muted">未在官方库中找到足够接近的特性</span>
+              <div className="muted">未在官方库中找到足够接近的特性</div>
             )}
           </div>
         ))}
@@ -940,12 +1337,9 @@ function StepContent({
           result.corrections.map((c: any, i: number) => (
             <p key={i}>
               <b>{c.name}</b>：{c.original} → {c.recommended}{' '}
-              <button className="srd-feature">
+              <span className="feature-match-tag">
                 {c.basis.adversary} · {c.basis.feature}
-                <span className="tooltip" role="tooltip">
-                  {c.basis.text}
-                </span>
-              </button>
+              </span>
             </p>
           ))
         ) : (
@@ -956,16 +1350,31 @@ function StepContent({
   }
 
   if (step === 6) {
+    const cleanPrefix = (str: string) =>
+      str
+        .replace(
+          /^(\[|【|\(|（)?(确定问题|待确认|待作者决定|建议|问题|警告|待定)(\]|】|\)|）)?\s*[：:、\s-]*/i,
+          ''
+        )
+        .replace(/^(确定问题|待确认|待作者决定|建议|问题|警告)[：:、\s-]*/i, '')
+        .trim()
+
+    const rawList = [...(step3Warnings || []), ...(result.warnings || [])]
+    const cleanedList = Array.from(new Set(rawList.map(cleanPrefix))).filter(Boolean).slice(0, 5)
+
     return (
       <div className="step-body">
-        {result.warnings?.length ? (
-          result.warnings.map((w: string, i: number) => (
-            <p className="notice" key={i}>
-              {w}
-            </p>
-          ))
+        {cleanedList.length ? (
+          <div className="mechanism-list">
+            {cleanedList.map((w, i) => (
+              <div className="mechanism-item" key={i}>
+                <span className="dot" />
+                <span>{w}</span>
+              </div>
+            ))}
+          </div>
         ) : (
-          <p className="muted">未发现结构性机制冲突，数值与动作经济合理。</p>
+          <p className="muted">未发现机制冲突与遗漏。</p>
         )}
       </div>
     )
@@ -974,21 +1383,54 @@ function StepContent({
   if (step === 7) {
     return (
       <div className="step-body">
-        <pre className="final-card">{result.markdown}</pre>
-        <button
-          className="secondary"
-          onClick={() => onCopyFinal && onCopyFinal(result.markdown)}
-        >
-          {copied ? (
-            <>
-              <Check size={14} color="#1a7f37" /> 已复制数据块
-            </>
-          ) : (
-            <>
-              <Copy size={14} /> 复制完整数据块
-            </>
-          )}
-        </button>
+        <RenderedMarkdownCard markdown={result.markdown} />
+        <div className="card-actions-group">
+          <button
+            className="secondary"
+            onClick={() => onCopyFinal && onCopyFinal(result.markdown)}
+            title="复制带 Markdown 标记的完整数据块"
+          >
+            {copiedAction === 'copy' ? (
+              <>
+                <Check size={14} color="#1a7f37" /> 已复制
+              </>
+            ) : (
+              <>
+                <Copy size={14} /> 复制
+              </>
+            )}
+          </button>
+          <button
+            className="secondary"
+            onClick={() => onInsertFinal && onInsertFinal(result.markdown)}
+            title="在当前 Markdown 原文末尾添加分割线并插入推荐数据块"
+          >
+            {copiedAction === 'insert' ? (
+              <>
+                <Check size={14} color="#1a7f37" /> 已插入
+              </>
+            ) : (
+              <>
+                <Plus size={14} /> 插入
+              </>
+            )}
+          </button>
+          <button
+            className="secondary"
+            onClick={() => onOverwriteFinal && onOverwriteFinal(result.markdown)}
+            title="用推荐的完整数据块覆盖替换当前文件内容"
+          >
+            {copiedAction === 'overwrite' ? (
+              <>
+                <Check size={14} color="#1a7f37" /> 已覆盖
+              </>
+            ) : (
+              <>
+                <RotateCcw size={14} /> 覆盖
+              </>
+            )}
+          </button>
+        </div>
       </div>
     )
   }

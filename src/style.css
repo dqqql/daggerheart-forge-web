@@ -64,6 +64,55 @@
   --radius-sm: 4px;
 }
 
+[data-theme="dark"] {
+  /* 灰度系统 - GitHub Dark */
+  --color-canvas-default: #0d1117;
+  --color-canvas-subtle: #161b22;
+  --color-canvas-inset: #010409;
+  --color-border-default: #30363d;
+  --color-border-muted: #21262d;
+  --color-fg-default: #e6edf3;
+  --color-fg-muted: #8b949e;
+  --color-fg-subtle: #6e7681;
+
+  /* 深色导航 Header */
+  --color-header-bg: #161b22;
+  --color-header-fg: #f0f6fc;
+  --color-header-muted: #8b949e;
+  --color-header-hover: #21262d;
+  --color-header-border: #30363d;
+
+  /* 主交互色 */
+  --color-accent-fg: #58a6ff;
+  --color-accent-emphasis: #1f6feb;
+  --color-accent-subtle: rgba(56, 139, 253, 0.15);
+  --color-accent-border: rgba(56, 139, 253, 0.4);
+
+  /* 语义色 - 成功 (绿) */
+  --color-success-fg: #3fb950;
+  --color-success-emphasis: #238636;
+  --color-success-border: #2ea043;
+  --color-success-subtle: rgba(46, 160, 67, 0.15);
+
+  /* 语义色 - 警告 (黄) */
+  --color-attention-fg: #d29922;
+  --color-attention-emphasis: #bb8009;
+  --color-attention-subtle: rgba(187, 128, 9, 0.15);
+  --color-attention-border: #bb8009;
+
+  /* 语义色 - 危险 (红) */
+  --color-danger-fg: #f85149;
+  --color-danger-emphasis: #da3633;
+  --color-danger-subtle: rgba(248, 81, 73, 0.15);
+  --color-danger-border: #f85149;
+
+  /* 阴影规范 */
+  --shadow-small: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 8px 24px rgba(1, 4, 9, 0.8);
+  --focus-ring: 0 0 0 3px rgba(31, 111, 235, 0.4);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -264,7 +313,8 @@ input:focus-visible,
 }
 
 .pane-heading button:hover {
-  background: #eaeef2;
+  background: var(--color-header-hover);
+  color: var(--color-fg-default);
 }
 
 .section-caption {
@@ -281,7 +331,7 @@ input:focus-visible,
   font-size: 11px;
   font-weight: 600;
   padding: 1px 6px;
-  background: rgba(175, 184, 193, 0.2);
+  background: var(--color-border-muted);
   color: var(--color-fg-default);
   border-radius: 10px;
 }
@@ -307,11 +357,11 @@ input:focus-visible,
 }
 
 .tree-row:hover {
-  background: #eaeef2;
+  background: var(--color-header-hover);
 }
 
 .tree-row.active {
-  background: rgba(9, 105, 218, 0.12);
+  background: var(--color-accent-subtle);
   color: var(--color-accent-fg);
   font-weight: 600;
 }
@@ -688,12 +738,12 @@ input:focus-visible,
 }
 
 .secondary:hover {
-  background: #eaeef2;
-  border-color: rgba(27, 31, 36, 0.15);
+  background: var(--color-header-hover);
+  border-color: var(--color-border-default);
 }
 
 .secondary:active {
-  background: #e8e8e8;
+  background: var(--color-border-muted);
 }
 
 /* 文本链接按钮 */
@@ -737,9 +787,12 @@ input:focus-visible,
 }
 
 .run-controls {
-  padding: 14px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--color-border-default);
   background: var(--color-canvas-default);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .run-controls p {
@@ -750,8 +803,9 @@ input:focus-visible,
 }
 
 .run-button {
-  width: 100%;
-  padding: 8px 16px;
+  width: auto;
+  min-width: 140px;
+  padding: 6px 20px;
   font-size: 14px;
 }
 
@@ -820,7 +874,7 @@ input:focus-visible,
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--color-fg-muted);
-  background: rgba(175, 184, 193, 0.2);
+  background: var(--color-border-muted);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
 }
@@ -960,6 +1014,12 @@ input:focus-visible,
   gap: 2px;
 }
 
+.metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .metric-grid span {
   font-size: 12px;
   color: var(--color-fg-muted);
@@ -970,6 +1030,49 @@ input:focus-visible,
   font-size: 14px;
   color: var(--color-fg-default);
   font-weight: 600;
+}
+
+/* 理由感叹号 Tooltip */
+.rationale-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-subtle);
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 1px;
+}
+
+.rationale-btn:hover,
+.rationale-btn:focus-visible {
+  color: var(--color-accent-fg);
+}
+
+.rationale-btn .tooltip {
+  display: none;
+  position: absolute;
+  right: -10px;
+  top: calc(100% + 6px);
+  width: 260px;
+  max-width: 80vw;
+  background: var(--color-canvas-default);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-default);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  z-index: 120;
+  line-height: 1.5;
+  white-space: normal;
+  font-weight: 400;
+  font-size: 12px;
+  text-align: left;
+}
+
+.rationale-btn:hover .tooltip,
+.rationale-btn:focus-visible .tooltip {
+  display: block;
 }
 
 /* GitHub Alert 风格 Notice */
@@ -983,9 +1086,10 @@ input:focus-visible,
   margin: 8px 0;
 }
 
+/* 特性匹配（新样式：大标题 + 原文 + 分割线 + 最多三条相似特性标蓝，无悬浮） */
 .feature-group {
-  border-bottom: 1px solid var(--color-border-muted);
-  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-default);
+  padding: 12px 0;
 }
 
 .feature-group:last-child {
@@ -993,26 +1097,55 @@ input:focus-visible,
   padding-bottom: 0;
 }
 
-.feature-group > b {
+.feature-title {
+  font-size: 15px;
+  font-weight: 600;
   color: var(--color-fg-default);
+  margin: 0 0 4px 0;
+}
+
+.feature-original {
   font-size: 13px;
-}
-
-.feature-group > p {
   color: var(--color-fg-muted);
-  margin: 3px 0 6px;
+  line-height: 1.5;
+  margin: 0 0 8px 0;
 }
 
-.feature-match {
-  padding: 4px 0;
+.feature-divider {
+  border: 0;
+  border-top: 1px dashed var(--color-border-default);
+  margin: 8px 0 10px 0;
+}
+
+.feature-match-item {
+  padding: 6px 0;
+}
+
+.feature-match-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent-fg);
+  margin-bottom: 3px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.feature-match > span {
-  color: var(--color-fg-muted);
+.feature-match-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-fg-subtle);
+  background: var(--color-canvas-subtle);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-muted);
+}
+
+.feature-match-body {
   font-size: 12px;
-  margin-top: 2px;
+  color: var(--color-fg-default);
+  line-height: 1.5;
 }
 
 .muted {
@@ -1020,7 +1153,170 @@ input:focus-visible,
   font-size: 13px;
 }
 
-/* 最终卡片 Markdown 代码区 */
+/* 机制复核列表 */
+.mechanism-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.mechanism-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-canvas-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-fg-default);
+}
+
+.mechanism-item .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-attention-emphasis);
+  flex: none;
+  margin-top: 7px;
+}
+
+/* 渲染后的敌人数据卡片（适用于步骤3基础卡片与步骤7最终完整数据块） */
+.rendered-card {
+  background: var(--color-canvas-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-fg-default);
+}
+
+.rendered-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--color-fg-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rendered-card .card-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-fg);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-sm);
+}
+
+.rendered-card-desc p {
+  margin: 4px 0;
+  color: var(--color-fg-muted);
+}
+
+.rendered-card-stats {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--color-canvas-default);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rendered-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rendered-stat-row .stat-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-fg-default);
+}
+
+.rendered-stat-row .stat-value {
+  color: var(--color-fg-default);
+  font-weight: 500;
+  text-align: right;
+}
+
+.rendered-card-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--color-border-default);
+  padding-top: 8px;
+}
+
+.rendered-card-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--color-fg-default);
+}
+
+.rendered-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rendered-feature-item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-muted);
+}
+
+.rendered-feature-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.rendered-feature-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.rendered-feature-name {
+  font-weight: 600;
+  color: var(--color-accent-fg);
+}
+
+.rendered-feature-kind {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-fg-muted);
+  background: var(--color-canvas-default);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-default);
+}
+
+.rendered-feature-text {
+  font-size: 12px;
+  color: var(--color-fg-default);
+  line-height: 1.5;
+}
+
+.card-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+/* 最终卡片 Markdown 代码区（备用） */
 .final-card {
   white-space: pre-wrap;
   word-break: break-word;
@@ -1039,29 +1335,23 @@ input:focus-visible,
   margin-top: 8px;
 }
 
+/* 未运行分析时的右侧空状态：居中放置运行按钮，去掉星星 */
 .analysis-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
   text-align: center;
-  margin: 60px 20px;
-  color: var(--color-fg-muted);
-}
-
-.analysis-empty > div {
-  font-size: 32px;
-  color: var(--color-fg-subtle);
-  margin-bottom: 8px;
-}
-
-.analysis-empty h3 {
-  font-size: 15px;
-  color: var(--color-fg-default);
-  font-weight: 600;
-  margin: 0 0 6px;
+  min-height: 280px;
+  flex: 1;
 }
 
 .analysis-empty p {
   font-size: 13px;
   line-height: 1.5;
-  margin: 0;
+  color: var(--color-fg-muted);
+  margin: 8px 0 0;
 }
 
 .retry {
@@ -1225,7 +1515,7 @@ input:focus-visible,
 }
 
 .close:hover {
-  background: #eaeef2;
+  background: var(--color-header-hover);
   color: var(--color-fg-default);
 }
 
@@ -1327,8 +1617,9 @@ input:focus-visible,
 /* 浮动 SRD 怪物卡片 */
 .card-popup {
   position: fixed;
-  width: 400px;
-  max-height: 72vh;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: 75vh;
   background: var(--color-canvas-default);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
@@ -1345,6 +1636,44 @@ input:focus-visible,
   background: var(--color-canvas-subtle);
   border-bottom: 1px solid var(--color-border-default);
   border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.popup-head:active {
+  cursor: grabbing;
+}
+
+.card-hover-preview {
+  position: fixed;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: 72vh;
+  background: var(--color-canvas-default);
+  border: 1px solid var(--color-accent-emphasis);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  z-index: 1000;
+  animation: fadeIn 0.12s ease-out;
+}
+
+.hover-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-accent-fg);
+  background: var(--color-accent-subtle);
+  border: 1px solid var(--color-accent-border);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .popup-head strong {
@@ -1370,7 +1699,7 @@ input:focus-visible,
 }
 
 .popup-head button:hover {
-  background: #eaeef2;
+  background: var(--color-header-hover);
   color: var(--color-fg-default);
 }
 
