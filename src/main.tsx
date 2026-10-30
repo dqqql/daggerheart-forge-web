@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { createPortal } from 'react-dom'
 import {
   ChevronDown,
   ChevronRight,
@@ -59,6 +60,33 @@ const TYPE_NAMES_ZH: Record<string, string> = {
 
 function formatEnemyType(type: string): string {
   return TYPE_NAMES_ZH[type] || type || '标准'
+}
+
+function RationaleHint({ reason }: { reason: string }) {
+  const [position, setPosition] = useState<{ left: number; top: number; width: number } | null>(null)
+  const show = (element: HTMLElement) => {
+    const trigger = element.getBoundingClientRect()
+    const panel = element.closest('.analysis')?.getBoundingClientRect()
+    const panelLeft = panel?.left ?? 0
+    const panelRight = panel?.right ?? window.innerWidth
+    const width = Math.min(286, panelRight - panelLeft - 16, window.innerWidth - 16)
+    const left = Math.max(panelLeft + 8, Math.min(trigger.right - width, panelRight - width - 8))
+    const top = trigger.bottom + 8
+    setPosition({ left, top, width })
+  }
+  return <>
+    <span className="rationale-btn" tabIndex={0} aria-label="设计理由"
+      onMouseEnter={event => show(event.currentTarget)}
+      onMouseLeave={() => setPosition(null)}
+      onFocus={event => show(event.currentTarget)}
+      onBlur={() => setPosition(null)}>
+      <AlertCircle size={13} />
+    </span>
+    {position && createPortal(
+      <span className="rationale-tooltip" role="tooltip" style={position}>{reason}</span>,
+      document.body
+    )}
+  </>
 }
 
 const STAT_LABELS_ZH: Record<string, string> = {
@@ -1432,14 +1460,7 @@ function StepContent({
               <div key={k}>
                 <div className="metric-header">
                   <span>{STAT_LABELS_ZH[k] || k}</span>
-                  {v?.rationale && (
-                    <span className="rationale-btn" tabIndex={0} aria-label="设计理由">
-                      <AlertCircle size={13} />
-                      <span className="tooltip" role="tooltip">
-                        {v.rationale}
-                      </span>
-                    </span>
-                  )}
+                  {v?.rationale && <RationaleHint reason={v.rationale} />}
                 </div>
                 <strong>{val}</strong>
               </div>
