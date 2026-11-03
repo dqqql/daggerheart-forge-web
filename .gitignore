@@ -1,5 +1,14 @@
 node_modules/
 dist/
+build/
+release/
+data/
+!skills/**/data/
+*.sqlite*
+*.sql.backup
+.env
+.env.*
+__pycache__/
 .wrangler/
 .dev.vars
 **/.dev.vars

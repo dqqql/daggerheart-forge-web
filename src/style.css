@@ -1635,7 +1635,7 @@ input:focus-visible,
 }
 
 /* GitHub 输入框规范 */
-.modal input, .auth-card input {
+.modal input {
   height: 34px;
   background: var(--color-canvas-subtle);
   border: 1px solid var(--color-border-default);
@@ -1646,7 +1646,7 @@ input:focus-visible,
   transition: all 0.15s ease;
 }
 
-.modal input:focus, .auth-card input:focus {
+.modal input:focus {
   background: var(--color-canvas-default);
   border-color: var(--color-accent-emphasis);
   box-shadow: var(--focus-ring);
@@ -1677,101 +1677,6 @@ input:focus-visible,
 .close:hover {
   background: var(--color-header-hover);
   color: var(--color-fg-default);
-}
-
-/* 认证屏幕 (GitHub 经典干净登录框) */
-.auth-screen {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-canvas-subtle);
-  padding: 24px;
-}
-
-.auth-card {
-  width: 340px;
-  background: var(--color-canvas-default);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  padding: 20px 24px 24px;
-  box-shadow: var(--shadow-card);
-}
-
-.auth-mark {
-  font-size: 38px;
-  color: var(--color-fg-default);
-  line-height: 1;
-  text-align: center;
-  margin-bottom: 12px;
-}
-
-.auth-screen h1 {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-fg-default);
-  text-align: center;
-  margin: 0 0 6px;
-}
-
-.auth-screen p {
-  font-size: 13px;
-  color: var(--color-fg-muted);
-  text-align: center;
-  margin: 0 0 20px;
-}
-
-.auth-card label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--color-fg-default);
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 14px;
-}
-
-.auth-card .primary {
-  width: 100%;
-  margin-top: 8px;
-  padding: 8px;
-  font-size: 14px;
-}
-
-.auth-card .error {
-  font-size: 13px;
-  color: var(--color-danger-fg);
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
-  margin-bottom: 14px;
-}
-
-.auth-toggle-box {
-  width: 340px;
-  margin-top: 16px;
-  background: var(--color-canvas-default);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--color-fg-muted);
-}
-
-.auth-toggle-box button {
-  color: var(--color-accent-fg);
-  background: none;
-  border: 0;
-  padding: 0;
-  font-weight: 500;
-  font-size: 13px;
-}
-
-.auth-toggle-box button:hover {
-  text-decoration: underline;
 }
 
 /* 浮动 SRD 怪物卡片 */

@@ -4,11 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
-    "types": ["@cloudflare/workers-types"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
     "strict": true
   },
-  "include": ["functions", "worker", "shared"]
+  "include": ["server", "skills", "shared", "tests"]
 }

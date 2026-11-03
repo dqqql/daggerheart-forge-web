@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { chineseFeatureName, chineseFeatureText, chineseReferenceReason, cleanFinalCardMarkdown, diceStats, extractMarkdownFeatures, finalCard, matchFeatures, normalize, recommend, selectReferences, terminology, type Card } from './forge'
-import adversaries from '../worker/data/adversaries.json'
-import benchmarks from '../worker/data/benchmarks.json'
+import adversaries from '../skills/daggerheart-adversary-forge/data/adversaries.json'
+import benchmarks from '../skills/daggerheart-adversary-forge/data/benchmarks.json'
 
 const cards=adversaries as Card[]
 const bench=benchmarks as Record<string,any>

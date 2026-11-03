@@ -11,7 +11,6 @@ import {
   Play,
   X,
   Settings2,
-  LogOut,
   RotateCcw,
   Copy,
   Check,
@@ -42,7 +41,6 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T
 }
 
-type User = { id: string; username: string }
 type Card = any
 
 const TYPE_NAMES_ZH: Record<string, string> = {
@@ -123,11 +121,6 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
   })
-  const [user, setUser] = useState<User | null>(null)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState('')
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -265,23 +258,16 @@ function App() {
   }
 
   useEffect(() => {
-    api<{ user: User }>('auth/me')
-      .then(x => setUser(x.user))
-      .catch(() => {})
+    api('session')
+      .then(() => Promise.all([
+        api<{ nodes: TreeNode[] }>('nodes').then(x => setNodes(x.nodes)),
+        api<{ configured: boolean }>('key').then(x => setKeyReady(x.configured))
+      ]))
+      .catch(e => setError(e.message))
   }, [])
 
   useEffect(() => {
-    if (!user) return
-    api<{ nodes: TreeNode[] }>('nodes')
-      .then(x => setNodes(x.nodes))
-      .catch(e => setError(e.message))
-    api<{ configured: boolean }>('key')
-      .then(x => setKeyReady(x.configured))
-      .catch(() => {})
-  }, [user])
-
-  useEffect(() => {
-    if (!selected || !user) {
+    if (!selected) {
       setRun(null)
       return
     }
@@ -308,7 +294,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [selected, user])
+  }, [selected])
 
   useEffect(() => {
     if (!run || !['queued', 'running'].includes(run.status)) return
@@ -322,21 +308,6 @@ function App() {
       setRun(current => (selectedRef.current === x.run.file_id ? x.run : current))
     } catch (e) {
       setError((e as Error).message)
-    }
-  }
-
-  async function submitAuth(e: React.FormEvent) {
-    e.preventDefault()
-    setAuthError('')
-    try {
-      const x = await api<{ user: User }>('auth/' + authMode, {
-        method: 'POST',
-        body: JSON.stringify({ username, password })
-      })
-      setUser(x.user)
-      setPassword('')
-    } catch (e) {
-      setAuthError((e as Error).message)
     }
   }
 
@@ -616,80 +587,6 @@ function App() {
     )
   }
 
-  // 未登录界面
-  if (!user) {
-    return (
-      <main className="auth-screen">
-        <div className="auth-mark">
-          <Flame size={44} color="var(--color-fg-default)" />
-        </div>
-        <h1>{authMode === 'login' ? '登录敌人锻炉' : '注册新账号'}</h1>
-
-        <div className="auth-card">
-          <form onSubmit={submitAuth}>
-            <label>
-              用户名
-              <input
-                autoComplete="username"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              密码
-              <input
-                type="password"
-                autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </label>
-            {authError && (
-              <div className="error" role="alert">
-                {authError}
-              </div>
-            )}
-            <button className="primary" type="submit">
-              {authMode === 'login' ? '登 录' : '创建账号'}
-            </button>
-          </form>
-        </div>
-
-        <div className="auth-toggle-box">
-          {authMode === 'login' ? (
-            <span>
-              新用户？{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('register')
-                  setAuthError('')
-                }}
-              >
-                创建一个账号
-              </button>
-            </span>
-          ) : (
-            <span>
-              已有账号？{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('login')
-                  setAuthError('')
-                }}
-              >
-                直接登录
-              </button>
-            </span>
-          )}
-        </div>
-      </main>
-    )
-  }
-
   return (
     <div className="app">
       {/* 顶部 GitHub 经典深色 Header */}
@@ -702,7 +599,7 @@ function App() {
         </div>
 
         <div className="titlebar-center">
-          <span>工作区</span> /{' '}
+          <span>本地工作区</span> /{' '}
           {path.map((name, index) => (
             <React.Fragment key={index}>
               <span>{name}</span> /{' '}
@@ -740,25 +637,6 @@ function App() {
                 }}
               >
                 <Key size={16} /> 填写 API Key
-              </button>
-              <button
-                onClick={async () => {
-                  const saved = await Promise.all([...dirtyIds].map(id => saveFile(id)))
-                  if (saved.some(ok => !ok)) return
-                  await api('auth/logout', { method: 'POST' })
-                  setUser(null)
-                  setNodes([])
-                  setSelected(null)
-                  setOpenTabs([])
-                  setDirtyIds(new Set())
-                  drafts.current.clear()
-                  pending.current.forEach(timer => clearTimeout(timer))
-                  pending.current.clear()
-                  versions.current.clear()
-                  setSettingsOpen(false)
-                }}
-              >
-                <LogOut size={16} /> 退出登录
               </button>
             </div>
           )}
@@ -1120,7 +998,7 @@ function App() {
               <X size={17} />
             </button>
             <h2>DeepSeek API Key 设置</h2>
-            <p>密钥将使用 AES-GCM 独立加密存储于云端服务器，永不回传到客户端。</p>
+            <p>密钥仅保存在本机进程内存中，关闭服务后清除。分析时由本机直接调用 DeepSeek，文稿将发送给该 API。</p>
             <label>
               API Key
               <input

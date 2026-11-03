@@ -1,0 +1,31 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run release:prepare
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and package version differ' }
+          $assets = @(Get-ChildItem release -File | Where-Object { $_.Extension -eq '.zip' -or $_.Name -eq 'SHA256SUMS.txt' } | ForEach-Object FullName)
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME @assets --title "敌人锻炉 $version" --notes-file docs/release-notes.md
+          }
